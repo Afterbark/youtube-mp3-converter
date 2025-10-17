@@ -1,9 +1,8 @@
 import os
 import base64
-import io
-import threading
-import time
 import re
+import time
+import threading
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
@@ -13,10 +12,11 @@ from yt_dlp.utils import DownloadError, ExtractorError
 app = Flask(__name__)
 CORS(app)
 
-# ---------- Temp dir & cookie loading ----------
+# ---------- Temp dir ----------
 DOWNLOAD_DIR = Path("/tmp")
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+# ---------- Cookies (optional but recommended) ----------
 COOKIE_PATH = None
 _b64 = os.getenv("YTDLP_COOKIES_B64")
 if _b64:
@@ -27,18 +27,27 @@ if _b64:
     except Exception as e:
         print(f"[init] Failed to load cookies: {e}", flush=True)
 
+# ---------- Optional DSID to quiet web-client warnings ----------
 YTDLP_DATA_SYNC_ID = os.getenv("YTDLP_DATA_SYNC_ID")  # optional
 
+# Default output pattern (yt-dlp will write into /tmp via `paths`)
+OUT_DEFAULT = "yt_%(id)s.%(ext)s"
+
 SAFE_CHARS = re.compile(r"[^A-Za-z0-9 _.-]+")
+
 
 def safe_filename(name: str, ext: str = "mp3") -> str:
     name = SAFE_CHARS.sub("", name).strip() or "audio"
     return f"{name}.{ext}"
 
-def _base_ydl_opts(outtmpl: str, cookiefile: str | None, dsid: str | None, client: str):
+
+def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str):
+    """Build yt-dlp options for a specific player client."""
     opts = {
         "format": "bestaudio/best",
-        "outtmpl": outtmpl,
+        # Force everything into /tmp on Heroku
+        "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
+        "outtmpl": {"default": out_default},
         "noprogress": True,
         "quiet": True,
         "noplaylist": True,
@@ -53,7 +62,7 @@ def _base_ydl_opts(outtmpl: str, cookiefile: str | None, dsid: str | None, clien
         }],
         "extractor_args": {
             "youtube": {
-                "player_client": [client],   # "web" | "ios" | "android"
+                "player_client": [client],      # "web" | "ios" | "android"
                 "player_skip": ["webpage"],
                 **({"data_sync_id": [dsid]} if (dsid and client == "web") else {}),
             }
@@ -62,26 +71,49 @@ def _base_ydl_opts(outtmpl: str, cookiefile: str | None, dsid: str | None, clien
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # You may uncomment if IPv6 egress gives you trouble:
+        # If IPv6 egress causes issues, uncomment:
         # "force_ip": "0.0.0.0",
     }
     if cookiefile:
         opts["cookiefile"] = cookiefile
     return opts
 
-def download_audio_with_fallback(url: str, outtmpl: str, cookiefile: str | None, dsid: str | None):
-    """Try web -> ios -> android to avoid SABR/bot checks. Returns (title, mp3_path)."""
-    attempts = ["web", "ios", "android"]
+
+def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
+    """
+    Determine the final MP3 path after post-processing.
+    1) Try prepare_filename(info) and swap extension to .mp3
+    2) Fallback: glob for yt_<id>*.mp3 in /tmp
+    """
+    try:
+        pre = Path(ydl.prepare_filename(info))  # pre-postproc path (e.g., .webm/.m4a)
+        cand = pre.with_suffix(".mp3")
+        if cand.exists():
+            return cand
+    except Exception:
+        pass
+
+    vid = info.get("id") or "*"
+    matches = sorted(DOWNLOAD_DIR.glob(f"yt_{vid}*.mp3"),
+                     key=lambda p: p.stat().st_mtime,
+                     reverse=True)
+    if matches:
+        return matches[0]
+    raise FileNotFoundError("MP3 not found after postprocessing")
+
+
+def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None):
+    """Try web -> ios -> android to avoid SABR/bot checks. Returns (title, mp3_path:str)."""
     last_err = None
-    for client in attempts:
+    for client in ["web", "ios", "android"]:
         try:
             print(f"[yt-dlp] trying client={client}", flush=True)
-            with yt_dlp.YoutubeDL(_base_ydl_opts(outtmpl, cookiefile, dsid, client)) as ydl:
+            with yt_dlp.YoutubeDL(_base_ydl_opts(out_default, cookiefile, dsid, client)) as ydl:
                 info = ydl.extract_info(url, download=True)
                 title = info.get("title") or "audio"
-                mp3_path = outtmpl.replace("%(ext)s", "mp3")
-                return title, mp3_path
-        except (DownloadError, ExtractorError) as e:
+                mp3_path = _resolve_mp3_path(ydl, info)
+                return title, str(mp3_path)
+        except (DownloadError, ExtractorError, FileNotFoundError) as e:
             last_err = e
             print(f"[yt-dlp] client={client} failed: {e}", flush=True)
             continue
@@ -89,6 +121,8 @@ def download_audio_with_fallback(url: str, outtmpl: str, cookiefile: str | None,
         raise last_err
     raise RuntimeError("All extractor attempts failed")
 
+
+# ---------- Minimal UI for manual tests ----------
 HOME_HTML = """
 <!doctype html>
 <html>
@@ -96,7 +130,7 @@ HOME_HTML = """
     <meta charset="utf-8"/>
     <title>YouTube → MP3</title>
     <style>
-      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;}
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:700px;margin:40px auto;padding:0 16px;}
       input,button{font-size:16px;padding:10px;border:1px solid #ccc;border-radius:10px}
       button{cursor:pointer}
       .row{display:flex;gap:8px}
@@ -118,7 +152,6 @@ HOME_HTML = """
         e.preventDefault();
         const url = u.value.trim();
         if(!url) return;
-        // Open a new tab to GET /download?url=... so the browser performs the download
         const dl = location.origin + "/download?url=" + encodeURIComponent(url);
         window.open(dl, "_blank");
         msg.textContent = "Starting download...";
@@ -128,13 +161,16 @@ HOME_HTML = """
 </html>
 """
 
-@app.route("/", methods=["GET"])
+
+@app.get("/")
 def home():
     return render_template_string(HOME_HTML)
 
-@app.route("/health", methods=["GET"])
+
+@app.get("/health")
 def health():
     return jsonify({"ok": True})
+
 
 @app.route("/download", methods=["GET", "POST"])
 def download():
@@ -143,32 +179,34 @@ def download():
     if not url:
         return jsonify({"error": "missing url"}), 400
 
-    # Unique output template in /tmp
-    outtmpl = str(DOWNLOAD_DIR / ("yt_%(id)s.%(ext)s"))
-
     try:
         cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
-        title, mp3_path = download_audio_with_fallback(url, outtmpl, cookiefile, YTDLP_DATA_SYNC_ID)
+        title, mp3_path = download_audio_with_fallback(
+            url,
+            OUT_DEFAULT,
+            cookiefile=cookiefile,
+            dsid=YTDLP_DATA_SYNC_ID
+        )
 
-        # Build a safe name and stream the file
         safe_name = safe_filename(title, "mp3")
         resp = send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True, download_name=safe_name)
-        # Allow extension to read filename from headers
+        # Let the extension read the filename header
         resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
 
-        # Background cleanup
+        # Cleanup the file after a short delay
         def _cleanup(path):
             try:
                 time.sleep(30)
                 Path(path).unlink(missing_ok=True)
             except Exception:
                 pass
-        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
 
+        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
         return resp
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 if __name__ == "__main__":
-    # Local dev only; on Heroku gunicorn runs it
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
