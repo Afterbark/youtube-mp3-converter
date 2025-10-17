@@ -1,26 +1,22 @@
 import os
-import uuid
 import base64
+import io
 import threading
-import traceback
+import time
+import re
 from pathlib import Path
-from flask import Flask, request, send_file, make_response, jsonify
+from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
 import yt_dlp
+from yt_dlp.utils import DownloadError, ExtractorError
 
 app = Flask(__name__)
-# Allow your extension to call this API and read filename headers
-CORS(app, resources={r"/*": {"origins": "*"}}, expose_headers=["Content-Disposition"])
+CORS(app)
 
-# Heroku writes are allowed only in /tmp
+# ---------- Temp dir & cookie loading ----------
 DOWNLOAD_DIR = Path("/tmp")
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-# ---- Optional: load YouTube cookies from Heroku config var (recommended if you hit bot checks)
-# Run locally or on Heroku:
-#   (Windows PowerShell)
-#     $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("youtube_cookies.txt"))
-#     heroku config:set YTDLP_COOKIES_B64=$b64 -a <your-app>
 COOKIE_PATH = None
 _b64 = os.getenv("YTDLP_COOKIES_B64")
 if _b64:
@@ -30,121 +26,149 @@ if _b64:
         print(f"[init] Loaded cookies to {COOKIE_PATH}", flush=True)
     except Exception as e:
         print(f"[init] Failed to load cookies: {e}", flush=True)
-        COOKIE_PATH = None
 
+YTDLP_DATA_SYNC_ID = os.getenv("YTDLP_DATA_SYNC_ID")  # optional
 
-def _safe_filename(name: str) -> str:
-    # Basic filename sanitizer
-    bad = r'\/:*?"<>|'
-    for ch in bad:
-        name = name.replace(ch, "-")
-    name = name.strip().strip(".")
-    return name or "audio"
+SAFE_CHARS = re.compile(r"[^A-Za-z0-9 _.-]+")
 
+def safe_filename(name: str, ext: str = "mp3") -> str:
+    name = SAFE_CHARS.sub("", name).strip() or "audio"
+    return f"{name}.{ext}"
 
-@app.route("/")
-def home():
-    # Simple test form so you can hit the app in a browser
-    return """
-    <h2>YouTube → MP3</h2>
-    <form action="/download" method="post">
-      <input type="text" name="url" placeholder="Enter YouTube URL" style="width: 360px" required>
-      <button type="submit">Convert</button>
-    </form>
-    <p style="color:#666">Tip: If you get a bot check in logs, set YTDLP_COOKIES_B64 on Heroku.</p>
-    """, 200, {"Content-Type": "text/html; charset=utf-8"}
-
-
-@app.route("/download", methods=["POST"])
-def download():
-    url = (request.form.get("url") or "").strip()
-    if not url:
-        return jsonify(error="missing_url"), 400
-
-    file_id = str(uuid.uuid4())
-    outtmpl = str(DOWNLOAD_DIR / f"{file_id}.%(ext)s")
-
-    # yt-dlp options tuned for Heroku reliability
-    ydl_opts = {
+def _base_ydl_opts(outtmpl: str, cookiefile: str | None, dsid: str | None, client: str):
+    opts = {
         "format": "bestaudio/best",
         "outtmpl": outtmpl,
         "noprogress": True,
         "quiet": True,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
-        ],
-        # Try to avoid anti-bot by using web client and fewer fetches
+        "noplaylist": True,
+        "retries": 3,
+        "fragment_retries": 3,
+        "concurrent_fragment_downloads": 1,
+        "geo_bypass": True,
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }],
         "extractor_args": {
             "youtube": {
-                "player_client": ["web"],
-                "player_skip": ["webpage"],  # skip extra webpage parsing
+                "player_client": [client],   # "web" | "ios" | "android"
+                "player_skip": ["webpage"],
+                **({"data_sync_id": [dsid]} if (dsid and client == "web") else {}),
             }
         },
-        "concurrent_fragment_downloads": 1,
-        # Uncomment if you specifically need IPv4 only:
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+        # You may uncomment if IPv6 egress gives you trouble:
         # "force_ip": "0.0.0.0",
     }
+    if cookiefile:
+        opts["cookiefile"] = cookiefile
+    return opts
 
-    # Use cookiefile if provided (helps when YouTube challenges “sign in to confirm you're not a bot”)
-    if COOKIE_PATH and COOKIE_PATH.exists():
-        ydl_opts["cookiefile"] = str(COOKIE_PATH)
+def download_audio_with_fallback(url: str, outtmpl: str, cookiefile: str | None, dsid: str | None):
+    """Try web -> ios -> android to avoid SABR/bot checks. Returns (title, mp3_path)."""
+    attempts = ["web", "ios", "android"]
+    last_err = None
+    for client in attempts:
+        try:
+            print(f"[yt-dlp] trying client={client}", flush=True)
+            with yt_dlp.YoutubeDL(_base_ydl_opts(outtmpl, cookiefile, dsid, client)) as ydl:
+                info = ydl.extract_info(url, download=True)
+                title = info.get("title") or "audio"
+                mp3_path = outtmpl.replace("%(ext)s", "mp3")
+                return title, mp3_path
+        except (DownloadError, ExtractorError) as e:
+            last_err = e
+            print(f"[yt-dlp] client={client} failed: {e}", flush=True)
+            continue
+    if last_err:
+        raise last_err
+    raise RuntimeError("All extractor attempts failed")
 
-    # If ffmpeg isn't found even after adding the buildpack, you can point to a path:
-    # ydl_opts["ffmpeg_location"] = "/app/.heroku/bin"
+HOME_HTML = """
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>YouTube → MP3</title>
+    <style>
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;}
+      input,button{font-size:16px;padding:10px;border:1px solid #ccc;border-radius:10px}
+      button{cursor:pointer}
+      .row{display:flex;gap:8px}
+      #msg{margin-top:12px;color:#555}
+    </style>
+  </head>
+  <body>
+    <h1>YouTube → MP3 (Heroku)</h1>
+    <form id="f" class="row">
+      <input id="u" type="url" required placeholder="https://www.youtube.com/watch?v=..." style="flex:1">
+      <button>Convert</button>
+    </form>
+    <div id="msg"></div>
+    <script>
+      const f = document.getElementById('f');
+      const u = document.getElementById('u');
+      const msg = document.getElementById('msg');
+      f.addEventListener('submit', (e)=>{
+        e.preventDefault();
+        const url = u.value.trim();
+        if(!url) return;
+        // Open a new tab to GET /download?url=... so the browser performs the download
+        const dl = location.origin + "/download?url=" + encodeURIComponent(url);
+        window.open(dl, "_blank");
+        msg.textContent = "Starting download...";
+      });
+    </script>
+  </body>
+</html>
+"""
+
+@app.route("/", methods=["GET"])
+def home():
+    return render_template_string(HOME_HTML)
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"ok": True})
+
+@app.route("/download", methods=["GET", "POST"])
+def download():
+    # Accept URL from GET ?url=... or POST form body
+    url = request.args.get("url") or request.form.get("url")
+    if not url:
+        return jsonify({"error": "missing url"}), 400
+
+    # Unique output template in /tmp
+    outtmpl = str(DOWNLOAD_DIR / ("yt_%(id)s.%(ext)s"))
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            title = info.get("title") or "audio"
+        cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
+        title, mp3_path = download_audio_with_fallback(url, outtmpl, cookiefile, YTDLP_DATA_SYNC_ID)
 
-        title = _safe_filename(title)
-        mp3_path = DOWNLOAD_DIR / f"{file_id}.mp3"
+        # Build a safe name and stream the file
+        safe_name = safe_filename(title, "mp3")
+        resp = send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True, download_name=safe_name)
+        # Allow extension to read filename from headers
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
 
-        if not mp3_path.exists():
-            # Some edge cases: postprocessor failed or YouTube blocked the download
-            return jsonify(error="no_mp3_generated"), 500
-
-        resp = make_response(
-            send_file(
-                str(mp3_path),
-                as_attachment=True,
-                download_name=f"{title}.mp3",
-                mimetype="audio/mpeg",
-                max_age=0,
-            )
-        )
-
-        # Schedule cleanup
-        def _cleanup():
+        # Background cleanup
+        def _cleanup(path):
             try:
-                if mp3_path.exists():
-                    mp3_path.unlink()
+                time.sleep(30)
+                Path(path).unlink(missing_ok=True)
             except Exception:
                 pass
+        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
 
-        threading.Timer(60.0, _cleanup).start()
         return resp
-
-    except yt_dlp.utils.DownloadError as e:
-        msg = str(e)
-        # Surface common anti-bot hint to the client
-        if "Sign in to confirm" in msg or "cookies" in msg.lower():
-            return jsonify(
-                error="youtube_antibot",
-                hint="Set YTDLP_COOKIES_B64 with your youtube.com cookies, or try again later.",
-                detail=msg[:500],
-            ), 502  # Bad gateway-ish to indicate upstream block
-        print("DOWNLOAD_ERROR(yt-dlp):\n" + traceback.format_exc(), flush=True)
-        return jsonify(error="download_error", detail=msg[:500]), 500
-    except Exception:
-        print("DOWNLOAD_ERROR:\n" + traceback.format_exc(), flush=True)
-        return jsonify(error="conversion_failed"), 500
-
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    # Local dev
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    # Local dev only; on Heroku gunicorn runs it
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
