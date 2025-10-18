@@ -45,8 +45,7 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
     """Build yt-dlp options for a specific player client."""
     opts = {
         "format": "bestaudio/best",
-        # Force everything into /tmp on Heroku
-        "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
+        "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},  # force /tmp
         "outtmpl": {"default": out_default},
         "noprogress": True,
         "quiet": True,
@@ -71,8 +70,6 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # If IPv6 egress causes issues, uncomment:
-        # "force_ip": "0.0.0.0",
     }
     if cookiefile:
         opts["cookiefile"] = cookiefile
@@ -80,13 +77,9 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
 
 
 def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
-    """
-    Determine the final MP3 path after post-processing.
-    1) Try prepare_filename(info) and swap extension to .mp3
-    2) Fallback: glob for yt_<id>*.mp3 in /tmp
-    """
+    """Get the final MP3 path after post-processing."""
     try:
-        pre = Path(ydl.prepare_filename(info))  # pre-postproc path (e.g., .webm/.m4a)
+        pre = Path(ydl.prepare_filename(info))  # pre-postproc path (.webm/.m4a)
         cand = pre.with_suffix(".mp3")
         if cand.exists():
             return cand
@@ -94,9 +87,11 @@ def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
         pass
 
     vid = info.get("id") or "*"
-    matches = sorted(DOWNLOAD_DIR.glob(f"yt_{vid}*.mp3"),
-                     key=lambda p: p.stat().st_mtime,
-                     reverse=True)
+    matches = sorted(
+        DOWNLOAD_DIR.glob(f"yt_{vid}*.mp3"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )
     if matches:
         return matches[0]
     raise FileNotFoundError("MP3 not found after postprocessing")
@@ -181,28 +176,43 @@ def download():
 
     try:
         cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
-    title, mp3_path = download_audio_with_fallback(
-        url,
-        OUT_DEFAULT,
-        cookiefile=cookiefile,
-        dsid=YTDLP_DATA_SYNC_ID
-    )
 
-    # If title is missing, try extracting it from yt-dlp metadata file or the URL
-    if not title or title.lower() == "audio":
-        try:
-            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-                info = ydl.extract_info(url, download=False)
-                title = info.get('title', 'audio')
-        except Exception:
-            title = "audio"
+        title, mp3_path = download_audio_with_fallback(
+            url,
+            OUT_DEFAULT,
+            cookiefile=cookiefile,
+            dsid=YTDLP_DATA_SYNC_ID
+        )
 
-    safe_name = safe_filename(title, "mp3")
-    resp = send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True, download_name=safe_name)
+        # If title was missing, try another quick metadata fetch
+        if not title or title.lower() == "audio":
+            try:
+                with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    title = info.get('title', 'audio')
+            except Exception:
+                title = "audio"
 
-            # Optional: expose for POST clients that parse filename
-            resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
-            return resp
+        safe_name = safe_filename(title, "mp3")
+        resp = send_file(
+            mp3_path,
+            mimetype="audio/mpeg",
+            as_attachment=True,
+            download_name=safe_name
+        )
+        # Let POST clients read the filename if needed
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+
+        # optional cleanup
+        def _cleanup(path):
+            try:
+                time.sleep(30)
+                Path(path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
+        return resp
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
