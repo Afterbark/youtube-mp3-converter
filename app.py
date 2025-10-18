@@ -181,19 +181,28 @@ def download():
 
     try:
         cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
-        title, mp3_path = download_audio_with_fallback(
-            url,
-            OUT_DEFAULT,
-            cookiefile=cookiefile,
-            dsid=YTDLP_DATA_SYNC_ID
-        )
+    title, mp3_path = download_audio_with_fallback(
+        url,
+        OUT_DEFAULT,
+        cookiefile=cookiefile,
+        dsid=YTDLP_DATA_SYNC_ID
+    )
 
-        # Server will provide the filename; Chrome honors it on GET download.
-        safe_name = safe_filename(title, "mp3")
-        resp = send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True, download_name=safe_name)
-        # Optional: expose for POST clients that parse filename
-        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
-        return resp
+    # If title is missing, try extracting it from yt-dlp metadata file or the URL
+    if not title or title.lower() == "audio":
+        try:
+            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                info = ydl.extract_info(url, download=False)
+                title = info.get('title', 'audio')
+        except Exception:
+            title = "audio"
+
+    safe_name = safe_filename(title, "mp3")
+    resp = send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True, download_name=safe_name)
+
+            # Optional: expose for POST clients that parse filename
+            resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+            return resp
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
