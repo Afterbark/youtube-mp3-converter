@@ -2,6 +2,9 @@ import os
 import base64
 import re
 import time
+import json
+import urllib.parse
+import urllib.request
 import threading
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template_string
@@ -45,7 +48,7 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
     """Build yt-dlp options for a specific player client."""
     opts = {
         "format": "bestaudio/best",
-        "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},  # force /tmp
+        "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
         "outtmpl": {"default": out_default},
         "noprogress": True,
         "quiet": True,
@@ -95,6 +98,37 @@ def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
     if matches:
         return matches[0]
     raise FileNotFoundError("MP3 not found after postprocessing")
+
+
+def fetch_title_with_ytdlp(url: str, cookiefile: str | None, dsid: str | None):
+    """Metadata-only title fetch using the same cookies/clients."""
+    for client in ["web", "ios", "android"]:
+        try:
+            opts = _base_ydl_opts(OUT_DEFAULT, cookiefile, dsid, client)
+            opts.update({"skip_download": True})
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                t = (info or {}).get("title")
+                if t:
+                    return t
+        except Exception:
+            continue
+    return None
+
+
+def fetch_title_oembed(url: str):
+    """Last-resort title via YouTube oEmbed (no cookies)."""
+    try:
+        q = urllib.parse.quote(url, safe="")
+        oembed = f"https://www.youtube.com/oembed?url={q}&format=json"
+        with urllib.request.urlopen(oembed, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            t = data.get("title")
+            if t:
+                return t
+    except Exception:
+        pass
+    return None
 
 
 def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None):
@@ -177,6 +211,7 @@ def download():
     try:
         cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
 
+        # 1) Download + initial title
         title, mp3_path = download_audio_with_fallback(
             url,
             OUT_DEFAULT,
@@ -184,26 +219,28 @@ def download():
             dsid=YTDLP_DATA_SYNC_ID
         )
 
-        # If title was missing, try another quick metadata fetch
-        if not title or title.lower() == "audio":
-            try:
-                with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    title = info.get('title', 'audio')
-            except Exception:
-                title = "audio"
+        # 2) If title missing/too generic -> try metadata-only yt-dlp
+        if not title or title.strip().lower() == "audio":
+            t2 = fetch_title_with_ytdlp(url, cookiefile, YTDLP_DATA_SYNC_ID)
+            if t2:
+                title = t2
 
-        safe_name = safe_filename(title, "mp3")
+        # 3) If still missing -> try oEmbed (no cookies)
+        if not title or title.strip().lower() == "audio":
+            t3 = fetch_title_oembed(url)
+            if t3:
+                title = t3
+
+        safe_name = safe_filename(title or "audio", "mp3")
         resp = send_file(
             mp3_path,
             mimetype="audio/mpeg",
             as_attachment=True,
             download_name=safe_name
         )
-        # Let POST clients read the filename if needed
         resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
 
-        # optional cleanup
+        # optional background cleanup
         def _cleanup(path):
             try:
                 time.sleep(30)
