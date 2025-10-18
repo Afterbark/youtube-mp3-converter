@@ -188,20 +188,11 @@ def download():
             dsid=YTDLP_DATA_SYNC_ID
         )
 
+        # Server will provide the filename; Chrome honors it on GET download.
         safe_name = safe_filename(title, "mp3")
         resp = send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True, download_name=safe_name)
-        # Let the extension read the filename header
+        # Optional: expose for POST clients that parse filename
         resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
-
-        # Cleanup the file after a short delay
-        def _cleanup(path):
-            try:
-                time.sleep(30)
-                Path(path).unlink(missing_ok=True)
-            except Exception:
-                pass
-
-        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
         return resp
 
     except Exception as e:
