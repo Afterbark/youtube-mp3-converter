@@ -38,6 +38,16 @@ OUT_DEFAULT = "yt_%(id)s.%(ext)s"
 
 SAFE_CHARS = re.compile(r"[^A-Za-z0-9 _.-]+")
 
+# Clients to try (broadest first to work around SABR/throttling)
+CLIENTS_TO_TRY = [
+    "web",
+    "web_safari",
+    "web_embedded",
+    "tv",
+    "ios",
+    "android",
+]
+
 
 def safe_filename(name: str, ext: str = "mp3") -> str:
     name = SAFE_CHARS.sub("", name).strip() or "audio"
@@ -55,6 +65,7 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         "noplaylist": True,
         "retries": 3,
         "fragment_retries": 3,
+        "extractor_retries": 3,   # retry metadata extraction too
         "concurrent_fragment_downloads": 1,
         "geo_bypass": True,
         "postprocessors": [{
@@ -64,15 +75,20 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         }],
         "extractor_args": {
             "youtube": {
-                "player_client": [client],      # "web" | "ios" | "android"
+                "player_client": [client],      # try multiple clients
                 "player_skip": ["webpage"],
-                **({"data_sync_id": [dsid]} if (dsid and client == "web") else {}),
+                **({"data_sync_id": [dsid]} if (dsid and client.startswith("web")) else {}),
             }
         },
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.youtube.com/",
         },
+        # If IPv6 egress causes issues, uncomment:
+        # "force_ip": "0.0.0.0",
+        # If you still see throttling, you can try:
+        # "throttledratelimit": 102400,  # 100 KiB/s (lets yt-dlp detect & handle throttling)
     }
     if cookiefile:
         opts["cookiefile"] = cookiefile
@@ -102,7 +118,7 @@ def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
 
 def fetch_title_with_ytdlp(url: str, cookiefile: str | None, dsid: str | None):
     """Metadata-only title fetch using the same cookies/clients."""
-    for client in ["web", "ios", "android"]:
+    for client in CLIENTS_TO_TRY:
         try:
             opts = _base_ydl_opts(OUT_DEFAULT, cookiefile, dsid, client)
             opts.update({"skip_download": True})
@@ -132,9 +148,9 @@ def fetch_title_oembed(url: str):
 
 
 def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None):
-    """Try web -> ios -> android to avoid SABR/bot checks. Returns (title, mp3_path:str)."""
+    """Try multiple clients to avoid SABR/bot checks. Returns (title, mp3_path:str)."""
     last_err = None
-    for client in ["web", "ios", "android"]:
+    for client in CLIENTS_TO_TRY:
         try:
             print(f"[yt-dlp] trying client={client}", flush=True)
             with yt_dlp.YoutubeDL(_base_ydl_opts(out_default, cookiefile, dsid, client)) as ydl:
