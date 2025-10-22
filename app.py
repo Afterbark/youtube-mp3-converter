@@ -2,9 +2,6 @@ import os
 import base64
 import re
 import time
-import json
-import urllib.parse
-import urllib.request
 import threading
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template_string
@@ -38,21 +35,9 @@ OUT_DEFAULT = "yt_%(id)s.%(ext)s"
 
 SAFE_CHARS = re.compile(r"[^A-Za-z0-9 _.-]+")
 
-# Clients to try (broadest first to work around SABR/throttling)
-CLIENTS_TO_TRY = [
-    "web",
-    "web_safari",
-    "web_embedded",
-    "tv",
-    "ios",
-    "android",
-]
-
-
 def safe_filename(name: str, ext: str = "mp3") -> str:
     name = SAFE_CHARS.sub("", name).strip() or "audio"
     return f"{name}.{ext}"
-
 
 def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str):
     """Build yt-dlp options for a specific player client."""
@@ -63,9 +48,9 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         "noprogress": True,
         "quiet": True,
         "noplaylist": True,
-        "retries": 3,
-        "fragment_retries": 3,
-        "extractor_retries": 3,   # retry metadata extraction too
+        "retries": 5,  # Increased retries for long videos
+        "fragment_retries": 5,  # Increased fragment retries
+        "extractor_retries": 5,  # Increased metadata retries
         "concurrent_fragment_downloads": 1,
         "geo_bypass": True,
         "postprocessors": [{
@@ -75,7 +60,7 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         }],
         "extractor_args": {
             "youtube": {
-                "player_client": [client],      # try multiple clients
+                "player_client": [client],      # Try multiple clients
                 "player_skip": ["webpage"],
                 **({"data_sync_id": [dsid]} if (dsid and client.startswith("web")) else {}),
             }
@@ -85,20 +70,24 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": "https://www.youtube.com/",
         },
-        # If IPv6 egress causes issues, uncomment:
-        # "force_ip": "0.0.0.0",
-        # If you still see throttling, you can try:
-        # "throttledratelimit": 102400,  # 100 KiB/s (lets yt-dlp detect & handle throttling)
+        "buffer_size": 1024 * 1024 * 10,  # 10MB buffer for handling larger video downloads
+        "merge_output_format": "mp3",  # Ensure output is in MP3 format if merging
+        "download-archive": str(DOWNLOAD_DIR / "downloaded.txt"),  # To keep track of downloaded files
+        "no_warnings": True,  # Suppress non-critical warnings during long downloads
+        "socket_timeout": 120,  # Increase the timeout for large files
     }
     if cookiefile:
         opts["cookiefile"] = cookiefile
     return opts
 
-
 def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
-    """Get the final MP3 path after post-processing."""
+    """
+    Determine the final MP3 path after post-processing.
+    1) Try prepare_filename(info) and swap extension to .mp3
+    2) Fallback: glob for yt_<id>*.mp3 in /tmp
+    """
     try:
-        pre = Path(ydl.prepare_filename(info))  # pre-postproc path (.webm/.m4a)
+        pre = Path(ydl.prepare_filename(info))  # pre-postproc path (e.g., .webm/.m4a)
         cand = pre.with_suffix(".mp3")
         if cand.exists():
             return cand
@@ -106,51 +95,17 @@ def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
         pass
 
     vid = info.get("id") or "*"
-    matches = sorted(
-        DOWNLOAD_DIR.glob(f"yt_{vid}*.mp3"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True
-    )
+    matches = sorted(DOWNLOAD_DIR.glob(f"yt_{vid}*.mp3"),
+                     key=lambda p: p.stat().st_mtime,
+                     reverse=True)
     if matches:
         return matches[0]
     raise FileNotFoundError("MP3 not found after postprocessing")
 
-
-def fetch_title_with_ytdlp(url: str, cookiefile: str | None, dsid: str | None):
-    """Metadata-only title fetch using the same cookies/clients."""
-    for client in CLIENTS_TO_TRY:
-        try:
-            opts = _base_ydl_opts(OUT_DEFAULT, cookiefile, dsid, client)
-            opts.update({"skip_download": True})
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                t = (info or {}).get("title")
-                if t:
-                    return t
-        except Exception:
-            continue
-    return None
-
-
-def fetch_title_oembed(url: str):
-    """Last-resort title via YouTube oEmbed (no cookies)."""
-    try:
-        q = urllib.parse.quote(url, safe="")
-        oembed = f"https://www.youtube.com/oembed?url={q}&format=json"
-        with urllib.request.urlopen(oembed, timeout=6) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-            t = data.get("title")
-            if t:
-                return t
-    except Exception:
-        pass
-    return None
-
-
 def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None):
-    """Try multiple clients to avoid SABR/bot checks. Returns (title, mp3_path:str)."""
+    """Try web -> ios -> android to avoid SABR/bot checks. Returns (title, mp3_path:str)."""
     last_err = None
-    for client in CLIENTS_TO_TRY:
+    for client in ["web", "ios", "android"]:
         try:
             print(f"[yt-dlp] trying client={client}", flush=True)
             with yt_dlp.YoutubeDL(_base_ydl_opts(out_default, cookiefile, dsid, client)) as ydl:
@@ -165,7 +120,6 @@ def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | N
     if last_err:
         raise last_err
     raise RuntimeError("All extractor attempts failed")
-
 
 # ---------- Minimal UI for manual tests ----------
 HOME_HTML = """
@@ -206,16 +160,13 @@ HOME_HTML = """
 </html>
 """
 
-
 @app.get("/")
 def home():
     return render_template_string(HOME_HTML)
 
-
 @app.get("/health")
 def health():
     return jsonify({"ok": True})
-
 
 @app.route("/download", methods=["GET", "POST"])
 def download():
@@ -226,8 +177,6 @@ def download():
 
     try:
         cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
-
-        # 1) Download + initial title
         title, mp3_path = download_audio_with_fallback(
             url,
             OUT_DEFAULT,
@@ -235,41 +184,24 @@ def download():
             dsid=YTDLP_DATA_SYNC_ID
         )
 
-        # 2) If title missing/too generic -> try metadata-only yt-dlp
-        if not title or title.strip().lower() == "audio":
-            t2 = fetch_title_with_ytdlp(url, cookiefile, YTDLP_DATA_SYNC_ID)
-            if t2:
-                title = t2
-
-        # 3) If still missing -> try oEmbed (no cookies)
-        if not title or title.strip().lower() == "audio":
-            t3 = fetch_title_oembed(url)
-            if t3:
-                title = t3
-
-        safe_name = safe_filename(title or "audio", "mp3")
-        resp = send_file(
-            mp3_path,
-            mimetype="audio/mpeg",
-            as_attachment=True,
-            download_name=safe_name
-        )
-        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
-
-        # optional background cleanup
-        def _cleanup(path):
+        # If title is missing, try extracting it from yt-dlp metadata file or the URL
+        if not title or title.lower() == "audio":
             try:
-                time.sleep(30)
-                Path(path).unlink(missing_ok=True)
+                with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    title = info.get('title', 'audio')
             except Exception:
-                pass
+                title = "audio"
 
-        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
+        safe_name = safe_filename(title, "mp3")
+        resp = send_file(mp3_path, mimetype="audio/mpeg", as_attachment=True, download_name=safe_name)
+
+        # Optional: expose for POST clients that parse filename
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
         return resp
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
