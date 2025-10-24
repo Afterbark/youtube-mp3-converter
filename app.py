@@ -1,242 +1,275 @@
 import os
+import base64
 import re
-import io
-import zipfile
-import tempfile
-import shutil
-import datetime
-from flask import Flask, request, send_file, abort, jsonify, Response
+import time
+import json
+import urllib.parse
+import urllib.request
+import threading
+from pathlib import Path
+from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
 import yt_dlp
+from yt_dlp.utils import DownloadError, ExtractorError
 
 app = Flask(__name__)
 CORS(app)
 
+# ---------- Temp dir ----------
+DOWNLOAD_DIR = Path("/tmp")
+DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-def sanitize(name: str) -> str:
-    """Make a safe, short filename."""
-    name = re.sub(r'[\\/*?:"<>|]+', '_', name).strip()
-    # remove control chars
-    name = re.sub(r'[\x00-\x1f\x7f]+', '', name)
-    return name[:80] or 'download'
+# ---------- Cookies (optional but recommended) ----------
+COOKIE_PATH = None
+_b64 = os.getenv("YTDLP_COOKIES_B64")
+if _b64:
+    try:
+        COOKIE_PATH = DOWNLOAD_DIR / "youtube_cookies.txt"
+        COOKIE_PATH.write_bytes(base64.b64decode(_b64))
+        print(f"[init] Loaded cookies to {COOKIE_PATH}", flush=True)
+    except Exception as e:
+        print(f"[init] Failed to load cookies: {e}", flush=True)
 
+# ---------- Optional DSID to quiet web-client warnings ----------
+YTDLP_DATA_SYNC_ID = os.getenv("YTDLP_DATA_SYNC_ID")  # optional
 
-@app.get("/")
-def index():
-    # Minimal built-in UI for quick testing
-    return Response(
-        """
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>YouTube → MP3</title>
-<style>
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:24px;max-width:720px}
-  h1{margin:0 0 12px}
-  input,button{font-size:16px;padding:10px;border:1px solid #ccc;border-radius:10px}
-  input[type=url]{width:100%;box-sizing:border-box;margin:6px 0 10px}
-  .row{display:flex;gap:12px;align-items:center;margin:8px 0}
-  .row input[type=number]{width:120px}
-  button{cursor:pointer}
-  small{color:#666}
-</style>
-</head>
-<body>
-  <h1>YouTube → MP3</h1>
-  <form method="get" action="/download">
-    <label>Video / Playlist / Channel / Topic URL</label>
-    <input type="url" name="url" placeholder="https://www.youtube.com/watch?v=..." required />
-    <div class="row">
-      <label><input type="checkbox" name="mode" value="zip"> ZIP if URL has multiple videos</label>
-      <label>Limit <input type="number" name="limit" value="50" min="1" max="500" /></label>
-    </div>
-    <button type="submit">Convert</button>
-  </form>
-  <div style="height:10px"></div>
-  <small>Tip: Leave ZIP unchecked to grab just the first video from multi-video pages.</small>
-</body>
-</html>
-        """,
-        mimetype="text/html",
-    )
+# Default output pattern (yt-dlp will write into /tmp via `paths`)
+OUT_DEFAULT = "yt_%(id)s.%(ext)s"
+
+SAFE_CHARS = re.compile(r"[^A-Za-z0-9 _.-]+")
+
+# Clients to try (broadest first to work around SABR/throttling)
+CLIENTS_TO_TRY = [
+    "web",
+    "web_safari",
+    "web_embedded",
+    "tv",
+    "ios",
+    "android",
+]
 
 
-@app.get("/health")
-def health():
-    return jsonify(ok=True)
+def safe_filename(name: str, ext: str = "mp3") -> str:
+    name = SAFE_CHARS.sub("", name).strip() or "audio"
+    return f"{name}.{ext}"
 
 
-def build_common_ydl_opts(tmpdir: str) -> dict:
-    """Common yt-dlp options for MP3 conversion."""
+def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str):
+    """Build yt-dlp options for a specific player client."""
     opts = {
-        # file name: Title [ID].ext to avoid clashes and keep titles legible
-        "outtmpl": os.path.join(tmpdir, "%(title).200B [%(id)s].%(ext)s"),
-        "ignoreerrors": True,
+        "format": "bestaudio/best",
+        "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
+        "outtmpl": {"default": out_default},
+        "noprogress": True,
         "quiet": True,
-        "no_warnings": True,
+        "noplaylist": True,
+        "retries": 3,
+        "fragment_retries": 3,
+        "extractor_retries": 3,   # retry metadata extraction too
+        "concurrent_fragment_downloads": 1,
+        "geo_bypass": True,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
             "preferredquality": "192",
         }],
+        "extractor_args": {
+            "youtube": {
+                "player_client": [client],      # try multiple clients
+                "player_skip": ["webpage"],
+                **({"data_sync_id": [dsid]} if (dsid and client.startswith("web")) else {}),
+            }
+        },
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.youtube.com/",
+        },
+        # If IPv6 egress causes issues, uncomment:
+        # "force_ip": "0.0.0.0",
+        # If you still see throttling, you can try:
+        # "throttledratelimit": 102400,  # 100 KiB/s (lets yt-dlp detect & handle throttling)
     }
-
-    # Optional: cookie jar via base64 env (helps for age/region-restricted videos)
-    b64 = os.environ.get("YTDLP_COOKIES_B64", "").strip()
-    if b64:
-        import base64
-        cj_path = os.path.join(tmpdir, "cookies.txt")
-        with open(cj_path, "wb") as f:
-            f.write(base64.b64decode(b64))
-        opts["cookiefile"] = cj_path
-
+    if cookiefile:
+        opts["cookiefile"] = cookiefile
     return opts
 
 
-@app.get("/download")
+def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
+    """Get the final MP3 path after post-processing."""
+    try:
+        pre = Path(ydl.prepare_filename(info))  # pre-postproc path (.webm/.m4a)
+        cand = pre.with_suffix(".mp3")
+        if cand.exists():
+            return cand
+    except Exception:
+        pass
+
+    vid = info.get("id") or "*"
+    matches = sorted(
+        DOWNLOAD_DIR.glob(f"yt_{vid}*.mp3"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )
+    if matches:
+        return matches[0]
+    raise FileNotFoundError("MP3 not found after postprocessing")
+
+
+def fetch_title_with_ytdlp(url: str, cookiefile: str | None, dsid: str | None):
+    """Metadata-only title fetch using the same cookies/clients."""
+    for client in CLIENTS_TO_TRY:
+        try:
+            opts = _base_ydl_opts(OUT_DEFAULT, cookiefile, dsid, client)
+            opts.update({"skip_download": True})
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                t = (info or {}).get("title")
+                if t:
+                    return t
+        except Exception:
+            continue
+    return None
+
+
+def fetch_title_oembed(url: str):
+    """Last-resort title via YouTube oEmbed (no cookies)."""
+    try:
+        q = urllib.parse.quote(url, safe="")
+        oembed = f"https://www.youtube.com/oembed?url={q}&format=json"
+        with urllib.request.urlopen(oembed, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            t = data.get("title")
+            if t:
+                return t
+    except Exception:
+        pass
+    return None
+
+
+def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None):
+    """Try multiple clients to avoid SABR/bot checks. Returns (title, mp3_path:str)."""
+    last_err = None
+    for client in CLIENTS_TO_TRY:
+        try:
+            print(f"[yt-dlp] trying client={client}", flush=True)
+            with yt_dlp.YoutubeDL(_base_ydl_opts(out_default, cookiefile, dsid, client)) as ydl:
+                info = ydl.extract_info(url, download=True)
+                title = info.get("title") or "audio"
+                mp3_path = _resolve_mp3_path(ydl, info)
+                return title, str(mp3_path)
+        except (DownloadError, ExtractorError, FileNotFoundError) as e:
+            last_err = e
+            print(f"[yt-dlp] client={client} failed: {e}", flush=True)
+            continue
+    if last_err:
+        raise last_err
+    raise RuntimeError("All extractor attempts failed")
+
+
+# ---------- Minimal UI for manual tests ----------
+HOME_HTML = """
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>YouTube → MP3</title>
+    <style>
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:700px;margin:40px auto;padding:0 16px;}
+      input,button{font-size:16px;padding:10px;border:1px solid #ccc;border-radius:10px}
+      button{cursor:pointer}
+      .row{display:flex;gap:8px}
+      #msg{margin-top:12px;color:#555}
+    </style>
+  </head>
+  <body>
+    <h1>YouTube → MP3 (Heroku)</h1>
+    <form id="f" class="row">
+      <input id="u" type="url" required placeholder="https://www.youtube.com/watch?v=..." style="flex:1">
+      <button>Convert</button>
+    </form>
+    <div id="msg"></div>
+    <script>
+      const f = document.getElementById('f');
+      const u = document.getElementById('u');
+      const msg = document.getElementById('msg');
+      f.addEventListener('submit', (e)=>{
+        e.preventDefault();
+        const url = u.value.trim();
+        if(!url) return;
+        const dl = location.origin + "/download?url=" + encodeURIComponent(url);
+        window.open(dl, "_blank");
+        msg.textContent = "Starting download...";
+      });
+    </script>
+  </body>
+</html>
+"""
+
+
+@app.get("/")
+def home():
+    return render_template_string(HOME_HTML)
+
+
+@app.get("/health")
+def health():
+    return jsonify({"ok": True})
+
+
+@app.route("/download", methods=["GET", "POST"])
 def download():
-    """
-    Supports:
-      - Single video: /download?url=...
-      - Multi (playlist/topic/channel) as ZIP: /download?url=...&mode=zip[&limit=50]
-      - Behavior in 'single' mode with multi-URL: download the first playable video.
-    """
-    url = (request.args.get("url") or "").strip()
-    mode = request.args.get("mode", "single").lower()
-    if mode == "zip":   # checkbox in HTML sends mode=zip; keep consistent
-        mode = "zip"
-    else:
-        mode = "single"
-    try:
-        limit = int(request.args.get("limit", "50"))
-        limit = max(1, min(limit, 500))  # safety bounds
-    except ValueError:
-        limit = 50
-
+    # Accept URL from GET ?url=... or POST form body
+    url = request.args.get("url") or request.form.get("url")
     if not url:
-        abort(400, "Missing 'url' parameter")
+        return jsonify({"error": "missing url"}), 400
 
-    tmpdir = tempfile.mkdtemp(prefix="ytmp3_")
     try:
-        # Base options
-        ydl_opts = build_common_ydl_opts(tmpdir)
+        cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
 
-        # First, probe the URL to see if it's a playlist/topic/etc.
-        info_probe_opts = dict(ydl_opts)
-        info_probe_opts["skip_download"] = True
-        info_probe_opts["extract_flat"] = "in_playlist"  # quick listing for big containers
-
-        with yt_dlp.YoutubeDL(info_probe_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-
-        # Normalize entries
-        def iter_entries(obj):
-            if not obj:
-                return []
-            if isinstance(obj, dict) and obj.get("entries"):
-                return obj["entries"]
-            return [obj]
-
-        entries = iter_entries(info)
-
-        if mode == "single":
-            # Grab first playable item
-            first = entries[0] if entries else None
-            if not first:
-                abort(404, "No videos found at this URL")
-
-            # If we got a flattened entry, use its URL; else use original
-            first_url = first.get("url") if isinstance(first, dict) else url
-
-            single_opts = dict(ydl_opts)
-            single_opts["noplaylist"] = True
-            single_opts.pop("extract_flat", None)
-            single_opts.pop("skip_download", None)
-
-            with yt_dlp.YoutubeDL(single_opts) as ydl:
-                ydl.extract_info(first_url, download=True)
-
-            # Find produced MP3 and stream from memory (so we can clean temp dir)
-            mp3_path = None
-            for root, _, files in os.walk(tmpdir):
-                for fn in files:
-                    if fn.lower().endswith(".mp3"):
-                        mp3_path = os.path.join(root, fn)
-                        break
-                if mp3_path:
-                    break
-
-            if not mp3_path:
-                abort(500, "Failed to produce MP3")
-
-            with open(mp3_path, "rb") as f:
-                data = io.BytesIO(f.read())
-            data.seek(0)
-
-            return send_file(
-                data,
-                as_attachment=True,
-                download_name=os.path.basename(mp3_path),
-                mimetype="audio/mpeg",
-            )
-
-        # ZIP mode
-        # Select up to 'limit' entries and download each as MP3
-        selected_urls = []
-        for e in entries:
-            if len(selected_urls) >= limit:
-                break
-            u = e.get("url") if isinstance(e, dict) else None
-            selected_urls.append(u or url)
-
-        if not selected_urls:
-            abort(404, "No videos found to zip")
-
-        multi_opts = dict(ydl_opts)
-        multi_opts["noplaylist"] = True  # download entries one-by-one as videos
-        multi_opts.pop("extract_flat", None)
-        multi_opts.pop("skip_download", None)
-
-        with yt_dlp.YoutubeDL(multi_opts) as ydl:
-            for u in selected_urls:
-                try:
-                    ydl.extract_info(u, download=True)
-                except Exception:
-                    # Keep going even if one item fails
-                    continue
-
-        # Pack MP3s into a ZIP (in memory)
-        zip_buf = io.BytesIO()
-        added = 0
-        with zipfile.ZipFile(zip_buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
-            for root, _, files in os.walk(tmpdir):
-                for fn in files:
-                    if fn.lower().endswith(".mp3"):
-                        full = os.path.join(root, fn)
-                        z.write(full, arcname=fn)
-                        added += 1
-
-        if added == 0:
-            abort(500, "No MP3s were created")
-
-        zip_buf.seek(0)
-        stamp = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-        title = sanitize((info or {}).get("title") or "playlist")
-        zip_name = f"{title}-{added}tracks-{stamp}.zip"
-
-        return send_file(
-            zip_buf,
-            as_attachment=True,
-            download_name=zip_name,
-            mimetype="application/zip",
+        # 1) Download + initial title
+        title, mp3_path = download_audio_with_fallback(
+            url,
+            OUT_DEFAULT,
+            cookiefile=cookiefile,
+            dsid=YTDLP_DATA_SYNC_ID
         )
 
-    finally:
-        # Best-effort cleanup
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        # 2) If title missing/too generic -> try metadata-only yt-dlp
+        if not title or title.strip().lower() == "audio":
+            t2 = fetch_title_with_ytdlp(url, cookiefile, YTDLP_DATA_SYNC_ID)
+            if t2:
+                title = t2
+
+        # 3) If still missing -> try oEmbed (no cookies)
+        if not title or title.strip().lower() == "audio":
+            t3 = fetch_title_oembed(url)
+            if t3:
+                title = t3
+
+        safe_name = safe_filename(title or "audio", "mp3")
+        resp = send_file(
+            mp3_path,
+            mimetype="audio/mpeg",
+            as_attachment=True,
+            download_name=safe_name
+        )
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+
+        # optional background cleanup
+        def _cleanup(path):
+            try:
+                time.sleep(30)
+                Path(path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
+        return resp
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "5000"))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
