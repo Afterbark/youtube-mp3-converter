@@ -172,256 +172,251 @@ HOME_HTML = """
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="utf-8" />
   <title>YouTube → MP3</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <style>
     :root{
-      --bg:#0b0c10;
-      --card:#0f1115;
-      --text:#e6e8eb;
-      --muted:#9aa3ad;
-      --brand1:#6aa6ff;
-      --brand2:#4285f4;
-      --ok:#13b884;
-      --warn:#ffb020;
-      --err:#ef4444;
-      --border:#1b1e26;
-      --radius:18px;
-      --shadow:0 24px 60px rgba(0,0,0,.35);
-      --ring:0 0 0 2px rgba(106,166,255,.45);
+      --bg:#0b0c10; --panel:#0f1115; --panel-2:#0b0d12;
+      --text:#e6e8eb; --muted:#9aa3ad; --border:#1b1e26;
+      --brand:#6aa6ff; --brand-strong:#4285f4; --ok:#13b884; --err:#ef4444;
+      --radius:18px; --shadow:0 18px 40px rgba(0,0,0,.35);
+      --focus:0 0 0 2px rgba(106,166,255,.45);
     }
     @media (prefers-color-scheme: light){
       :root{
-        --bg:#f7f9fc;
-        --card:#ffffff;
-        --text:#0f1115;
-        --muted:#5f6b76;
-        --brand1:#3b7cff;
-        --brand2:#1f6bff;
-        --border:#e6ebf2;
-        --shadow:0 24px 60px rgba(10,22,37,.08);
-        --ring:0 0 0 2px rgba(31,107,255,.30);
+        --bg:#f6f7fb; --panel:#ffffff; --panel-2:#f3f6fb;
+        --text:#0f1115; --muted:#5f6b76; --border:#e8ecf2;
+        --brand:#3b7cff; --brand-strong:#1f6bff; --shadow:0 18px 40px rgba(10,22,37,.08);
+        --focus:0 0 0 2px rgba(31,107,255,.28);
       }
     }
+
     *{box-sizing:border-box}
-    html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    .wrap{max-width:900px;margin:64px auto;padding:0 16px}
+    html,body{margin:0;background:var(--bg);color:var(--text);
+      font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+
+    .container{max-width:900px;margin:56px auto;padding:0 18px}
+
     .hero{
-      display:flex;align-items:center;gap:14px;margin-bottom:18px
+      display:flex;align-items:center;gap:14px;margin-bottom:16px
     }
     .logo{
-      width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--brand1),var(--brand2));
-      display:grid;place-items:center;color:#fff;font-weight:800;letter-spacing:.3px;box-shadow:0 10px 24px rgba(66,133,244,.35)
+      width:42px;height:42px;border-radius:14px;
+      background:linear-gradient(135deg,var(--brand),var(--brand-strong));
+      display:grid;place-items:center;color:#fff;font-weight:800;letter-spacing:.4px
     }
     h1{margin:0;font-size:28px}
-    p.lead{margin:6px 0 24px;color:var(--muted)}
+    p.subtitle{margin:4px 0 22px;color:var(--muted)}
+
     .card{
-      background:radial-gradient(1200px 400px at 20% -10%, rgba(66,133,244,.08), transparent 40%) , var(--card);
-      border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);
-      padding:22px;
+      background:var(--panel);border:1px solid var(--border);
+      border-radius:var(--radius);box-shadow:var(--shadow);
+      padding:20px
     }
-    .row{display:flex;gap:10px;flex-wrap:wrap}
+
+    .input-row{display:flex;gap:10px;flex-wrap:wrap}
     input[type="url"]{
-      flex:1;min-width:260px;padding:14px 16px;border:1px solid var(--border);background:transparent;color:var(--text);
-      border-radius:14px;outline:none;transition:box-shadow .2s,border .2s
+      flex:1;min-width:280px;padding:14px 16px;border:1px solid var(--border);
+      background:transparent;color:var(--text);border-radius:14px;outline:none;
+      transition:box-shadow .2s,border .2s
     }
     input::placeholder{color:var(--muted)}
-    input:focus{box-shadow:var(--ring);border-color:transparent}
-    button{
-      padding:14px 18px;border:none;border-radius:14px;color:#fff;cursor:pointer;font-weight:700;
-      background:linear-gradient(135deg,var(--brand1),var(--brand2));box-shadow:0 10px 20px rgba(66,133,244,.35);
-      transition:transform .05s ease, filter .2s
+    input:focus{box-shadow:var(--focus);border-color:transparent}
+
+    .btn{
+      padding:14px 18px;border:none;border-radius:14px;cursor:pointer;
+      font-weight:700
     }
-    button:active{transform:translateY(1px)}
-    .actions{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
-    .link{color:var(--brand2);text-decoration:none;font-weight:600}
-    .link:hover{text-decoration:underline}
-    .status{margin-top:14px;display:flex;align-items:center;gap:10px;color:var(--muted);min-height:24px}
+    .btn.primary{background:var(--brand);color:#fff}
+    .btn.primary:hover{background:var(--brand-strong)}
+    .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+    .btn.ghost:hover{background:rgba(127,127,127,.06)}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+
+    .status{
+      display:flex;align-items:center;gap:10px;margin-top:14px;color:var(--muted)
+    }
     .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
-    .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--err)}
-    .spinner{width:16px;height:16px;border-radius:50%;border:3px solid var(--muted);border-top-color:transparent;animation:spin .8s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .kitchen{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
-    .chip{border:1px solid var(--border);border-radius:9999px;padding:8px 12px;color:var(--muted)}
-    .foot{margin-top:18px;color:var(--muted);font-size:13px}
-    /* Toast */
-    .toast{
-      position:fixed;left:50%;bottom:28px;transform:translateX(-50%);padding:12px 16px;border-radius:12px;
-      background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);color:var(--text);opacity:0;pointer-events:none;
-      transition:opacity .25s, transform .25s;
+    .dot.ok{background:var(--ok)}
+    .dot.err{background:var(--err)}
+    .spinner{
+      width:16px;height:16px;border-radius:50%;
+      border:2px solid var(--muted);border-top-color:transparent;
+      animation:spin .8s linear infinite
     }
-    .toast.show{opacity:1;transform:translate(-50%, -6px)}
-    /* Progress */
-    .progress{height:8px;border-radius:999px;background:rgba(127,127,127,.18);overflow:hidden;margin-top:12px;display:none}
-    .bar{height:100%;width:25%;background:linear-gradient(135deg,var(--brand1),var(--brand2));animation:bar 1.1s linear infinite}
-    @keyframes bar{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .panel{
+      margin-top:18px;background:var(--panel-2);
+      border:1px dashed var(--border);border-radius:14px;padding:14px
+    }
+    .tiny{font-size:13px;color:var(--muted)}
+    code.k{background:rgba(127,127,127,.15);padding:2px 6px;border-radius:6px}
+    .history{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+    .item{
+      display:flex;align-items:center;gap:10px;justify-content:space-between;
+      background:transparent;border:1px solid var(--border);border-radius:12px;padding:10px 12px
+    }
+    .item-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%}
+    .badge{font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+    .badge.ok{color:var(--ok);border-color:var(--ok)}
+    .badge.err{color:var(--err);border-color:var(--err)}
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="container">
     <div class="hero">
       <div class="logo">MP3</div>
       <div>
         <h1>YouTube → MP3 (Heroku)</h1>
-        <p class="lead">Paste a YouTube link and we’ll fetch a high-quality MP3. Works with long videos (queue mode).</p>
+        <p class="subtitle">Fast MP3 downloads with long-video support. Paste a link, queue, and we’ll ping you when it’s ready.</p>
       </div>
     </div>
 
     <div class="card">
-      <form id="form" class="row" autocomplete="off">
-        <input id="url" type="url" required placeholder="https://www.youtube.com/watch?v=..." />
-        <button id="go" type="submit">Convert</button>
+      <form id="form">
+        <div class="input-row">
+          <input id="url" type="url" required placeholder="https://www.youtube.com/watch?v=..." />
+          <button id="convert" class="btn primary" type="submit">Convert</button>
+        </div>
+
+        <div class="row">
+          <button id="paste" class="btn ghost" type="button">Paste</button>
+          <button id="sample" class="btn ghost" type="button">Try sample</button>
+        </div>
+
+        <div id="status" class="status">
+          <div id="statusIcon" class="dot"></div>
+          <div id="statusText">Ready</div>
+        </div>
       </form>
 
-      <div class="actions">
-        <div>
-          <a class="link" id="sample" href="#">Try a sample video</a>
-          <span class="chip" id="health">Checking server…</span>
-        </div>
-        <a class="link" href="https://chrome://extensions" id="ext" target="_blank" rel="noreferrer">Use the Chrome extension</a>
+      <div class="panel tiny">
+        <b>How it works</b> — We enqueue your job (<code class="k">/enqueue</code>), the server fetches & converts,
+        then we offer a download when it’s done. Great for 1-hour videos.
       </div>
 
-      <div class="progress" id="progress"><div class="bar"></div></div>
-
-      <div class="status" id="status">
-        <div class="dot" id="dot"></div>
-        <span id="statustxt">Ready</span>
+      <div id="historyWrap" class="panel" style="display:none">
+        <div class="tiny"><b>Recent jobs</b></div>
+        <div id="history" class="history"></div>
       </div>
     </div>
-
-    <div class="kitchen">
-      <div class="chip">MP3 • 192 kbps</div>
-      <div class="chip">FFmpeg post-processing</div>
-      <div class="chip">Client fallbacks (web/ios/tv)</div>
-      <div class="chip">Queue & Poll for long videos</div>
-    </div>
-
-    <div class="foot">Tip: livestreams and very long videos take a while—queue mode keeps working in the background.</div>
   </div>
 
-  <div class="toast" id="toast"></div>
-
   <script>
-    const $ = (s) => document.querySelector(s);
-    const dot = $("#dot");
-    const txt = $("#statustxt");
-    const progress = $("#progress");
-    const toast = $("#toast");
-    const form = $("#form");
-    const urlInput = $("#url");
-    const healthChip = $("#health");
-    const sampleBtn = $("#sample");
+    // ---------- DOM helpers ----------
+    const $ = (id) => document.getElementById(id);
+    const statusIcon = $("statusIcon");
+    const statusText = $("statusText");
+    const historyWrap = $("historyWrap");
+    const historyList = $("history");
 
-    // --- helpers ---
-    const setStatus = (state, message) => {
-      txt.textContent = message || "";
-      dot.className = "dot";
-      if (state === "ok") dot.classList.add("ok");
-      else if (state === "warn") dot.classList.add("warn");
-      else if (state === "err") dot.classList.add("err");
-    };
-    const showToast = (msg) => {
-      toast.textContent = msg;
-      toast.classList.add("show");
-      setTimeout(()=> toast.classList.remove("show"), 2200);
-    };
-    const validYouTube = (u) => /^(https?:\\/\\/)?(www\\.)?(youtube\\.com|youtu\\.be)\\//i.test(u);
+    function setStatus(kind, text){
+      statusText.textContent = text;
+      statusIcon.className = kind === "spin" ? "spinner" : "dot" + (kind ? " " + kind : "");
+    }
 
-    // Health
-    fetch("/health").then(r => r.ok ? r.json(): null).then(data=>{
-      healthChip.textContent = (data && data.ok) ? "Server OK" : "Server check failed";
-    }).catch(()=> healthChip.textContent = "Server check failed");
+    function addHistory(entry){
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = \`
+        <div class="item-title">\${entry.title || entry.url}</div>
+        <div class="badge \${entry.status === "done" ? "ok" : entry.status === "error" ? "err" : ""}">\${entry.status}</div>
+      \`;
+      if (entry.status === "done" && entry.job_id){
+        div.style.cursor = "pointer";
+        div.title = "Download";
+        div.onclick = () => window.open("/download_job/" + entry.job_id, "_blank");
+      }
+      historyList.prepend(div);
+      historyWrap.style.display = "block";
+    }
 
-    // Sample link (stable chillhop stream ~long)
-    sampleBtn.addEventListener("click", (e)=>{
-      e.preventDefault();
-      urlInput.value = "https://www.youtube.com/watch?v=Dx5qFachd3A";
-      showToast("Loaded sample video");
-    });
-
-    async function tryEnqueue(url){
+    // ---------- Actions ----------
+    $("paste").onclick = async () => {
       try{
-        const resp = await fetch("/enqueue", {
-          method:"POST",
-          headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+        const t = await navigator.clipboard.readText();
+        if (t) $("url").value = t.trim();
+        setStatus("ok", t ? "Pasted from clipboard" : "warn", t ? "" : "Clipboard empty");
+      }catch{ setStatus("err","Clipboard access denied"); }
+    };
+
+    $("sample").onclick = () => {
+      $("url").value = "https://www.youtube.com/watch?v=Dx5qFachd3A"; // long, safe sample
+      setStatus("ok","Sample URL filled");
+    };
+
+    $("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const url = $("url").value.trim();
+      if(!url){ setStatus("err","Please enter a valid YouTube URL"); return; }
+
+      // Queue
+      setStatus("spin","Queuing…");
+      $("convert").disabled = true;
+
+      try{
+        const r = await fetch("/enqueue", {
+          method: "POST",
+          headers: {"Content-Type":"application/x-www-form-urlencoded"},
           body: new URLSearchParams({ url })
         });
-        if (!resp.ok) return null; // not supported, fall back
-        const data = await resp.json();
-        return data.job_id || null;
-      }catch(e){ return null; }
-    }
+        if(!r.ok){ setStatus("err","Failed to queue"); $("convert").disabled = false; return; }
+        const { job_id } = await r.json();
+        if(!job_id){ setStatus("err","No job id"); $("convert").disabled = false; return; }
 
-    async function poll(jobId){
-      progress.style.display = "block";
-      const start = Date.now();
-      const iv = setInterval(async ()=>{
-        try{
-          const r = await fetch("/status/" + jobId);
-          if (!r.ok){ clearInterval(iv); setStatus("err","Status error"); progress.style.display="none"; return; }
-          const s = await r.json();
-          if (s.status === "done"){
+        // Poll
+        setStatus("spin","Working… fetching & converting");
+        const start = Date.now();
+        const iv = setInterval(async () => {
+          try{
+            const s = await fetch("/status/" + job_id);
+            const data = await s.json();
+
+            if (data.status === "done") {
+              clearInterval(iv);
+              setStatus("ok","Ready! Download starting…");
+              addHistory({ title: data.title, status: "done", job_id, url });
+              window.open("/download_job/" + job_id, "_blank");
+              $("convert").disabled = false;
+            } else if (data.status === "error") {
+              clearInterval(iv);
+              setStatus("err", data.error || "Conversion failed");
+              addHistory({ title: data.title || url, status: "error" });
+              $("convert").disabled = false;
+            } else {
+              // still working
+              if (Date.now() - start > 30*60*1000) {
+                clearInterval(iv);
+                setStatus("err","Timed out (30m)");
+                addHistory({ title: url, status: "error" });
+                $("convert").disabled = false;
+              }
+            }
+          }catch{
             clearInterval(iv);
-            setStatus("ok","Ready — starting download…");
-            progress.style.display = "none";
-            window.open("/download_job/" + jobId, "_blank");
-          } else if (s.status === "error"){
-            clearInterval(iv);
-            setStatus("err", s.error || "Conversion failed");
-            progress.style.display = "none";
-          } else {
-            // still working
-            const mins = Math.floor((Date.now() - start)/60000);
-            setStatus("warn", "Working…" + (mins ? " ("+mins+"m)" : ""));
+            setStatus("err","Status check failed");
+            addHistory({ title: url, status: "error" });
+            $("convert").disabled = false;
           }
-        }catch(e){
-          clearInterval(iv);
-          setStatus("err","Status check failed");
-          progress.style.display = "none";
-        }
-      }, 3000);
-    }
-
-    // Submit
-    form.addEventListener("submit", async (e)=>{
-      e.preventDefault();
-      const url = urlInput.value.trim();
-      if (!url){ setStatus("warn","Please paste a YouTube URL"); urlInput.focus(); return; }
-      if (!validYouTube(url)){ setStatus("warn","That doesn’t look like a YouTube link"); return; }
-
-      // Try async queue first; if not available, fall back to direct download
-      setStatus("warn","Queuing…");
-      dot.className = "spinner";
-
-      const jobId = await tryEnqueue(url);
-      if (jobId){
-        showToast("Queued. You can stay on this page.");
-        await poll(jobId);
-        return;
+        }, 3000);
+      }catch{
+        setStatus("err","Network error");
+        $("convert").disabled = false;
       }
-
-      // Fallback: direct
-      setStatus("warn","Starting direct download…");
-      progress.style.display = "block";
-      const dl = "/download?url=" + encodeURIComponent(url);
-      window.open(dl, "_blank");
-      setTimeout(()=> {
-        progress.style.display="none";
-        setStatus("ok","If your download didn’t start, the queue mode is recommended for long videos.");
-      }, 1500);
     });
 
-    // Prefill if URL param exists (?url=...)
-    try{
-      const qs = new URLSearchParams(location.search);
-      const u = qs.get("url");
-      if (u){ urlInput.value = u; setStatus("ok","URL prefilled"); }
-    }catch{}
+    // ---------- Init ----------
+    setStatus("", "Ready");
   </script>
 </body>
 </html>
 """
+
 
 
 
