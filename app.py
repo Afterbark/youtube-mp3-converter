@@ -264,7 +264,7 @@ HOME_HTML = """
       <div class="logo">MP3</div>
       <div>
         <h1>YouTube → MP3 (Heroku)</h1>
-        <p class="lead">Paste a YouTube link and we’ll fetch a high-quality MP3. Works with long videos (queue mode).</p>
+        <p class="lead">Paste a YouTube link and wait for it to finish downloading.</p>
       </div>
     </div>
 
@@ -297,7 +297,7 @@ HOME_HTML = """
       <div class="chip">Queue & Poll for long videos</div>
     </div>
 
-    <div class="foot">Tip: livestreams and very long videos take a while—queue mode keeps working in the background.</div>
+    <div class="foot">Tip: Long videos wont work.</div>
   </div>
 
   <div class="toast" id="toast"></div>
