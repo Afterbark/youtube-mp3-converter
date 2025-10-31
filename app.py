@@ -279,7 +279,7 @@ HOME_HTML = """
           <a class="link" id="sample" href="#">Try a sample video</a>
           <span class="chip" id="health">Checking server…</span>
         </div>
-        <a class="link" href="https://chrome://extensions" id="ext" target="_blank" rel="noreferrer">Use the Chrome extension</a>
+        <a class="link" href="chrome://extensions" id="ext" target="_blank" rel="noreferrer">Use the Chrome extension</a>
       </div>
 
       <div class="progress" id="progress"><div class="bar"></div></div>
@@ -336,7 +336,7 @@ HOME_HTML = """
     // Sample link (stable chillhop stream ~long)
     sampleBtn.addEventListener("click", (e)=>{
       e.preventDefault();
-      urlInput.value = "https://www.youtube.com/watch?v=Dx5qFachd3A";
+      urlInput.value = "https://www.youtube.com/watch?v=JK_hBk2f01k";
       showToast("Loaded sample video");
     });
 
