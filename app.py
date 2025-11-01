@@ -172,256 +172,382 @@ HOME_HTML = """
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="utf-8" />
   <title>YouTube → MP3</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <style>
+    /* ========= THEME ========= */
     :root{
       --bg:#0b0c10;
-      --card:#0f1115;
-      --text:#e6e8eb;
+      --bg-2:#0e1118;
+      --glass:#10131a90;        /* translucent */
+      --panel:#0f1115;          /* solid */
+      --text:#e8edf3;
       --muted:#9aa3ad;
-      --brand1:#6aa6ff;
-      --brand2:#4285f4;
-      --ok:#13b884;
-      --warn:#ffb020;
-      --err:#ef4444;
       --border:#1b1e26;
-      --radius:18px;
-      --shadow:0 24px 60px rgba(0,0,0,.35);
-      --ring:0 0 0 2px rgba(106,166,255,.45);
+      --brand:#6aa6ff;
+      --brand-2:#8c7dff;
+      --brand-3:#29d3c8;
+      --ok:#13b884;
+      --err:#ef4444;
+      --warn:#ffb020;
+
+      --radius-xl:22px;
+      --radius-lg:18px;
+      --radius:14px;
+
+      --shadow-xl:0 30px 80px rgba(0,0,0,.55), 0 6px 20px rgba(0,0,0,.35);
+      --shadow:0 16px 40px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.25);
+      --focus:0 0 0 2px rgba(106,166,255,.45);
+      --glass-blur:14px;
     }
     @media (prefers-color-scheme: light){
       :root{
-        --bg:#f7f9fc;
-        --card:#ffffff;
-        --text:#0f1115;
-        --muted:#5f6b76;
-        --brand1:#3b7cff;
-        --brand2:#1f6bff;
-        --border:#e6ebf2;
-        --shadow:0 24px 60px rgba(10,22,37,.08);
-        --ring:0 0 0 2px rgba(31,107,255,.30);
+        --bg:#edf2f8; --bg-2:#e9eef6;
+        --glass:#ffffffc7; --panel:#ffffff;
+        --text:#0f1115; --muted:#5f6b76; --border:#e6ebf2;
+        --shadow-xl:0 30px 80px rgba(10,22,37,.14), 0 6px 20px rgba(10,22,37,.08);
+        --shadow:0 16px 40px rgba(10,22,37,.12), 0 4px 14px rgba(10,22,37,.08);
+        --focus:0 0 0 2px rgba(31,107,255,.28);
       }
     }
     *{box-sizing:border-box}
-    html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    .wrap{max-width:900px;margin:64px auto;padding:0 16px}
+
+    /* ========= BACKGROUND LAYERS ========= */
+    html,body{height:100%}
+    body{
+      margin:0; color:var(--text);
+      font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:
+        radial-gradient(1200px 800px at 10% -10%, rgba(108,141,255,.18), transparent 55%),
+        radial-gradient(1200px 800px at 110% 10%, rgba(41,211,200,.18), transparent 55%),
+        linear-gradient(180deg, var(--bg), var(--bg-2));
+      overflow-x:hidden;
+    }
+    .fx{
+      position:fixed; inset:-20vmax -20vmax auto auto; pointer-events:none; z-index:0;
+      width:60vmax; height:60vmax; filter:blur(40px); opacity:.35;
+      background: radial-gradient(closest-side, #5f7cff 0%, transparent 62%),
+                  radial-gradient(closest-side, #33d1c0 0%, transparent 62%),
+                  radial-gradient(closest-side, #8b7bff 0%, transparent 62%);
+      mix-blend-mode:screen; animation:float 18s ease-in-out infinite alternate;
+    }
+    @keyframes float{
+      0%{ transform:translate3d(0,0,0) rotate(0deg); }
+      100%{ transform:translate3d(-6vmax,4vmax,0) rotate(12deg); }
+    }
+
+    /* ========= LAYOUT ========= */
+    .wrap{position:relative; z-index:1; max-width:1100px; margin:64px auto 100px; padding:0 22px}
+
     .hero{
-      display:flex;align-items:center;gap:14px;margin-bottom:18px
+      display:grid; grid-template-columns: 74px 1fr auto; gap:18px; align-items:center; margin-bottom:18px;
     }
     .logo{
-      width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--brand1),var(--brand2));
-      display:grid;place-items:center;color:#fff;font-weight:800;letter-spacing:.3px;box-shadow:0 10px 24px rgba(66,133,244,.35)
+      width:74px;height:74px;border-radius:20px;
+      background:conic-gradient(from 180deg, var(--brand), var(--brand-2), var(--brand-3), var(--brand));
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.08), var(--shadow);
+      display:grid; place-items:center; color:#fff; font-weight:900; letter-spacing:.6px; font-size:18px;
     }
-    h1{margin:0;font-size:28px}
-    p.lead{margin:6px 0 24px;color:var(--muted)}
+    .title{margin:0; font-size:36px; line-height:1.1; letter-spacing:.2px}
+    .subtitle{margin:6px 0 0; color:var(--muted)}
+
+    .glass{
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      background:var(--glass);
+      border:1px solid var(--border);
+      border-radius:var(--radius-xl);
+      box-shadow:var(--shadow-xl);
+    }
+
+    .panel{ padding:22px; margin-top:18px }
+    .grid{ display:grid; gap:18px }
+    @media (min-width:900px){ .grid{ grid-template-columns: 1.4fr .8fr } }
+
+    /* ========= CONVERTER CARD ========= */
     .card{
-      background:radial-gradient(1200px 400px at 20% -10%, rgba(66,133,244,.08), transparent 40%) , var(--card);
-      border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);
+      background:linear-gradient(180deg, rgba(255,255,255,.02), transparent), var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius-xl);
+      box-shadow:var(--shadow);
       padding:22px;
     }
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    input[type="url"]{
-      flex:1;min-width:260px;padding:14px 16px;border:1px solid var(--border);background:transparent;color:var(--text);
-      border-radius:14px;outline:none;transition:box-shadow .2s,border .2s
+
+    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center }
+    .inp{
+      flex:1; min-width:320px;
+      border:1px solid var(--border); background:transparent; color:var(--text);
+      border-radius:16px; padding:14px 16px; outline:none; transition:box-shadow .2s,border .2s;
     }
-    input::placeholder{color:var(--muted)}
-    input:focus{box-shadow:var(--ring);border-color:transparent}
-    button{
-      padding:14px 18px;border:none;border-radius:14px;color:#fff;cursor:pointer;font-weight:700;
-      background:linear-gradient(135deg,var(--brand1),var(--brand2));box-shadow:0 10px 20px rgba(66,133,244,.35);
-      transition:transform .05s ease, filter .2s
+    .inp::placeholder{ color:var(--muted) }
+    .inp:focus{ box-shadow:var(--focus); border-color:transparent }
+
+    .btn{
+      padding:14px 18px; border:none; border-radius:16px; cursor:pointer; font-weight:800;
+      letter-spacing:.2px; transition:transform .05s ease, filter .2s, background .2s, opacity .2s;
     }
-    button:active{transform:translateY(1px)}
-    .actions{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
-    .link{color:var(--brand2);text-decoration:none;font-weight:600}
-    .link:hover{text-decoration:underline}
-    .status{margin-top:14px;display:flex;align-items:center;gap:10px;color:var(--muted);min-height:24px}
-    .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
-    .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--err)}
-    .spinner{width:16px;height:16px;border-radius:50%;border:3px solid var(--muted);border-top-color:transparent;animation:spin .8s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .kitchen{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
-    .chip{border:1px solid var(--border);border-radius:9999px;padding:8px 12px;color:var(--muted)}
-    .foot{margin-top:18px;color:var(--muted);font-size:13px}
-    /* Toast */
-    .toast{
-      position:fixed;left:50%;bottom:28px;transform:translateX(-50%);padding:12px 16px;border-radius:12px;
-      background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);color:var(--text);opacity:0;pointer-events:none;
-      transition:opacity .25s, transform .25s;
+    .btn:active{ transform:translateY(1px) }
+    .btn[disabled]{ opacity:.6; cursor:not-allowed }
+    .btn.primary{
+      color:#fff;
+      background:linear-gradient(135deg, var(--brand), var(--brand-2) 60%, var(--brand-3));
+      box-shadow:0 12px 28px rgba(92,122,255,.35);
     }
-    .toast.show{opacity:1;transform:translate(-50%, -6px)}
-    /* Progress */
-    .progress{height:8px;border-radius:999px;background:rgba(127,127,127,.18);overflow:hidden;margin-top:12px;display:none}
-    .bar{height:100%;width:25%;background:linear-gradient(135deg,var(--brand1),var(--brand2));animation:bar 1.1s linear infinite}
-    @keyframes bar{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}
+    .btn.primary:hover{ filter:saturate(1.1) brightness(1.05) }
+    .btn.ghost{
+      background:transparent; color:var(--text); border:1px solid var(--border);
+    }
+    .btn.ghost:hover{ background:rgba(127,127,127,.07) }
+
+    .tools{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px }
+    .hint{ color:var(--muted); font-size:13px }
+
+    /* status + progress */
+    .status{ display:flex; align-items:center; gap:10px; margin-top:14px; color:var(--muted) }
+    .dot{ width:10px; height:10px; border-radius:50%; background:var(--muted) }
+    .dot.ok{ background:var(--ok) } .dot.err{ background:var(--err) } .dot.warn{ background:var(--warn) }
+    .spin{ width:16px; height:16px; border-radius:50%; border:2px solid var(--muted); border-top-color:transparent; animation:spin .8s linear infinite }
+    @keyframes spin{ to{ transform:rotate(360deg) } }
+
+    .bar{ position:relative; height:8px; border-radius:999px; background:rgba(127,127,127,.18); overflow:hidden; margin-top:8px }
+    .bar > i{
+      position:absolute; inset:0; width:35%;
+      background:linear-gradient(90deg, var(--brand), var(--brand-2));
+      border-radius:999px; animation:flow 1.4s ease-in-out infinite;
+    }
+    @keyframes flow{
+      0% { left:-40% } 50% { left:45% } 100% { left:105% }
+    }
+
+    /* ========= SIDE: FEATURES ========= */
+    .features{ display:grid; gap:14px }
+    .feat{
+      display:grid; grid-template-columns: 42px 1fr; gap:12px; align-items:center;
+      background:linear-gradient(180deg, rgba(255,255,255,.02), transparent), var(--panel);
+      border:1px solid var(--border); border-radius:16px; padding:14px;
+      box-shadow: 0 6px 16px rgba(0,0,0,.18);
+    }
+    .ico{
+      width:42px;height:42px;border-radius:12px; display:grid; place-items:center; color:#fff;
+      background:linear-gradient(135deg, var(--brand), var(--brand-2)); font-weight:900;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+    }
+    .feat h4{ margin:0 0 4px; font-size:15px }
+    .feat p{ margin:0; color:var(--muted); font-size:13px }
+
+    /* ========= HISTORY ========= */
+    .history{ margin-top:18px; }
+    .history h3{ margin:0 0 10px }
+    .items{ display:flex; flex-direction:column; gap:10px }
+    .item{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      background:linear-gradient(180deg, rgba(255,255,255,.02), transparent), var(--panel);
+      border:1px solid var(--border); border-radius:14px; padding:12px 14px;
+    }
+    .item .name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:66% }
+    .badge{ font-size:12px; padding:4px 10px; border-radius:999px; border:1px solid var(--border); color:var(--muted) }
+    .badge.ok{ color:var(--ok); border-color:var(--ok) }
+    .badge.err{ color:var(--err); border-color:var(--err) }
+
+    /* ========= FOOTER ========= */
+    footer{opacity:.75; text-align:center; margin:28px 0 8px; font-size:13px; color:var(--muted)}
+
   </style>
 </head>
 <body>
+  <div class="fx"></div>
   <div class="wrap">
+    <!-- HERO -->
     <div class="hero">
       <div class="logo">MP3</div>
       <div>
-        <h1>YouTube → MP3 (Heroku)</h1>
-        <p class="lead">Paste a YouTube link and wait for it to finish downloading.</p>
+        <h1 class="title">YouTube → MP3 (Heroku)</h1>
+        <div class="subtitle">Layered depth, glass panels, and a resilient queue for long videos.</div>
       </div>
+      <div class="glass" style="padding:10px 14px;border-radius:999px; font-weight:700">192 kbps • MP3</div>
     </div>
 
-    <div class="card">
-      <form id="form" class="row" autocomplete="off">
-        <input id="url" type="url" required placeholder="https://www.youtube.com/watch?v=..." />
-        <button id="go" type="submit">Convert</button>
-      </form>
+    <!-- GRID -->
+    <div class="grid">
+      <!-- LEFT: CONVERTER -->
+      <div class="card">
+        <form id="form">
+          <div class="row">
+            <input id="url" class="inp" type="url" required placeholder="https://www.youtube.com/watch?v=..." />
+            <button id="convert" class="btn primary" type="submit">Convert</button>
+          </div>
 
-      <div class="actions">
-        <div>
-          <a class="link" id="sample" href="#">Try a sample video</a>
-          <span class="chip" id="health">Checking server…</span>
+          <div class="tools">
+            <button id="paste" type="button" class="btn ghost">Paste</button>
+            <button id="sample" type="button" class="btn ghost">Try sample</button>
+            <span class="hint">We queue, convert, and notify when ready.</span>
+          </div>
+
+          <div class="status">
+            <div id="statusIcon" class="dot"></div>
+            <div id="statusText">Ready</div>
+          </div>
+          <div id="progress" class="bar" style="display:none"><i></i></div>
+        </form>
+
+        <!-- History -->
+        <div class="history">
+          <h3>Recent jobs</h3>
+          <div id="history" class="items"></div>
         </div>
-        <a class="link" href="chrome://extensions" id="ext" target="_blank" rel="noreferrer">Use the Chrome extension</a>
       </div>
 
-      <div class="progress" id="progress"><div class="bar"></div></div>
-
-      <div class="status" id="status">
-        <div class="dot" id="dot"></div>
-        <span id="statustxt">Ready</span>
-      </div>
+      <!-- RIGHT: FEATURES -->
+      <aside class="features">
+        <div class="feat">
+          <div class="ico">⏱</div>
+          <div>
+            <h4>Survives timeouts</h4>
+            <p>Async queue avoids router limits. One-hour videos? No sweat.</p>
+          </div>
+        </div>
+        <div class="feat">
+          <div class="ico">🎧</div>
+          <div>
+            <h4>Clear 192 kbps MP3</h4>
+            <p>FFmpeg post-processing for consistent output quality.</p>
+          </div>
+        </div>
+        <div class="feat">
+          <div class="ico">🛡</div>
+          <div>
+            <h4>Smart fallback clients</h4>
+            <p>Multiple YouTube clients to dodge throttling and SABR checks.</p>
+          </div>
+        </div>
+        <div class="feat">
+          <div class="ico">⚡</div>
+          <div>
+            <h4>Fast fragments</h4>
+            <p>Parallel fragment fetching for long videos (3× concurrency).</p>
+          </div>
+        </div>
+      </aside>
     </div>
 
-    <div class="kitchen">
-      <div class="chip">MP3 • 192 kbps</div>
-      <div class="chip">FFmpeg post-processing</div>
-      <div class="chip">Client fallbacks (web/ios/tv)</div>
-      <div class="chip">Queue & Poll for long videos</div>
-    </div>
-
-    <div class="foot">Tip: Long videos wont work.</div>
+    <footer>Built with Flask + yt-dlp • Glassmorphism UI • Dark/Light aware</footer>
   </div>
 
-  <div class="toast" id="toast"></div>
-
   <script>
-    const $ = (s) => document.querySelector(s);
-    const dot = $("#dot");
-    const txt = $("#statustxt");
-    const progress = $("#progress");
-    const toast = $("#toast");
-    const form = $("#form");
-    const urlInput = $("#url");
-    const healthChip = $("#health");
-    const sampleBtn = $("#sample");
+    // ---------- Helpers ----------
+    const $ = (id) => document.getElementById(id);
+    const statusIcon = $("statusIcon");
+    const statusText = $("statusText");
+    const progress = $("progress");
+    const historyList = $("history");
 
-    // --- helpers ---
-    const setStatus = (state, message) => {
-      txt.textContent = message || "";
-      dot.className = "dot";
-      if (state === "ok") dot.classList.add("ok");
-      else if (state === "warn") dot.classList.add("warn");
-      else if (state === "err") dot.classList.add("err");
-    };
-    const showToast = (msg) => {
-      toast.textContent = msg;
-      toast.classList.add("show");
-      setTimeout(()=> toast.classList.remove("show"), 2200);
-    };
-    const validYouTube = (u) => /^(https?:\\/\\/)?(www\\.)?(youtube\\.com|youtu\\.be)\\//i.test(u);
-
-    // Health
-    fetch("/health").then(r => r.ok ? r.json(): null).then(data=>{
-      healthChip.textContent = (data && data.ok) ? "Server OK" : "Server check failed";
-    }).catch(()=> healthChip.textContent = "Server check failed");
-
-    // Sample link (stable chillhop stream ~long)
-    sampleBtn.addEventListener("click", (e)=>{
-      e.preventDefault();
-      urlInput.value = "https://www.youtube.com/watch?v=JK_hBk2f01k";
-      showToast("Loaded sample video");
-    });
-
-    async function tryEnqueue(url){
-      try{
-        const resp = await fetch("/enqueue", {
-          method:"POST",
-          headers:{ "Content-Type":"application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ url })
-        });
-        if (!resp.ok) return null; // not supported, fall back
-        const data = await resp.json();
-        return data.job_id || null;
-      }catch(e){ return null; }
+    function setStatus(kind, text){
+      statusText.textContent = text || "";
+      statusIcon.className = kind === "spin" ? "spin" : "dot" + (kind ? " " + kind : "");
+      if (kind === "spin") progress.style.display = "block"; else progress.style.display = "none";
+    }
+    function addHistory({title, status, job_id, url}){
+      const el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = \`
+        <div class="name" title="\${title || url}">\${(title || url || "").replace(/</g,"&lt;")}</div>
+        <div class="badge \${status==="done" ? "ok" : status==="error" ? "err" : ""}">\${status}</div>
+      \`;
+      if (status === "done" && job_id){
+        el.style.cursor = "pointer";
+        el.title = "Download";
+        el.onclick = () => window.open("/download_job/" + job_id, "_blank");
+      }
+      historyList.prepend(el);
     }
 
-    async function poll(jobId){
-      progress.style.display = "block";
-      const start = Date.now();
-      const iv = setInterval(async ()=>{
-        try{
-          const r = await fetch("/status/" + jobId);
-          if (!r.ok){ clearInterval(iv); setStatus("err","Status error"); progress.style.display="none"; return; }
-          const s = await r.json();
-          if (s.status === "done"){
-            clearInterval(iv);
-            setStatus("ok","Ready — starting download…");
-            progress.style.display = "none";
-            window.open("/download_job/" + jobId, "_blank");
-          } else if (s.status === "error"){
-            clearInterval(iv);
-            setStatus("err", s.error || "Conversion failed");
-            progress.style.display = "none";
-          } else {
-            // still working
-            const mins = Math.floor((Date.now() - start)/60000);
-            setStatus("warn", "Working…" + (mins ? " ("+mins+"m)" : ""));
-          }
-        }catch(e){
-          clearInterval(iv);
-          setStatus("err","Status check failed");
-          progress.style.display = "none";
-        }
-      }, 3000);
-    }
+    // ---------- UI Buttons ----------
+    $("paste").onclick = async () => {
+      try {
+        const t = await navigator.clipboard.readText();
+        if (t) { $("url").value = t.trim(); setStatus("ok","URL pasted from clipboard"); }
+        else   { setStatus("warn","Clipboard is empty"); }
+      } catch {
+        setStatus("err","Clipboard access denied");
+      }
+    };
+    $("sample").onclick = () => {
+      $("url").value = "https://www.youtube.com/watch?v=Dx5qFachd3A";
+      setStatus("ok","Sample URL filled");
+    };
 
-    // Submit
-    form.addEventListener("submit", async (e)=>{
+    // ---------- Submit flow: enqueue → poll → download ----------
+    $("form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const url = urlInput.value.trim();
-      if (!url){ setStatus("warn","Please paste a YouTube URL"); urlInput.focus(); return; }
-      if (!validYouTube(url)){ setStatus("warn","That doesn’t look like a YouTube link"); return; }
-
-      // Try async queue first; if not available, fall back to direct download
-      setStatus("warn","Queuing…");
-      dot.className = "spinner";
-
-      const jobId = await tryEnqueue(url);
-      if (jobId){
-        showToast("Queued. You can stay on this page.");
-        await poll(jobId);
+      const url = $("url").value.trim();
+      if (!/^https?:\\/\\/(www\\.)?(youtube\\.com|youtu\\.be)\\//i.test(url)) {
+        setStatus("err","Please enter a valid YouTube URL");
         return;
       }
+      $("convert").disabled = true;
+      setStatus("spin","Queuing…");
 
-      // Fallback: direct
-      setStatus("warn","Starting direct download…");
-      progress.style.display = "block";
-      const dl = "/download?url=" + encodeURIComponent(url);
-      window.open(dl, "_blank");
-      setTimeout(()=> {
-        progress.style.display="none";
-        setStatus("ok","If your download didn’t start, the queue mode is recommended for long videos.");
-      }, 1500);
+      try{
+        const r = await fetch("/enqueue", {
+          method:"POST",
+          headers:{"Content-Type":"application/x-www-form-urlencoded"},
+          body:new URLSearchParams({ url })
+        });
+        if (!r.ok) { setStatus("err","Failed to queue"); $("convert").disabled = false; return; }
+        const { job_id } = await r.json();
+        if (!job_id) { setStatus("err","No job id returned"); $("convert").disabled = false; return; }
+
+        // Poll status every 3s
+        setStatus("spin","Working… fetching & converting");
+        const start = Date.now(), TIMEOUT = 30*60*1000;
+        const iv = setInterval(async () => {
+          try{
+            const s = await fetch("/status/" + job_id);
+            const data = await s.json();
+
+            if (data.status === "done") {
+              clearInterval(iv);
+              setStatus("ok","Ready! Starting download…");
+              addHistory({ title: data.title || url, status:"done", job_id, url });
+              window.open("/download_job/" + job_id, "_blank");
+              $("convert").disabled = false;
+            } else if (data.status === "error") {
+              clearInterval(iv);
+              setStatus("err", data.error || "Conversion failed");
+              addHistory({ title: data.title || url, status:"error" });
+              $("convert").disabled = false;
+            } else {
+              // still queued/working — leave spinner & bar running
+              if (Date.now() - start > TIMEOUT) {
+                clearInterval(iv);
+                setStatus("err","Timed out (30m)");
+                addHistory({ title: url, status:"error" });
+                $("convert").disabled = false;
+              }
+            }
+          }catch{
+            clearInterval(iv);
+            setStatus("err","Status check failed");
+            addHistory({ title: url, status:"error" });
+            $("convert").disabled = false;
+          }
+        }, 3000);
+
+      }catch{
+        setStatus("err","Network error");
+        $("convert").disabled = false;
+      }
     });
 
-    // Prefill if URL param exists (?url=...)
-    try{
-      const qs = new URLSearchParams(location.search);
-      const u = qs.get("url");
-      if (u){ urlInput.value = u; setStatus("ok","URL prefilled"); }
-    }catch{}
+    // initial
+    setStatus("", "Ready");
   </script>
 </body>
 </html>
 """
+
 
 
 
