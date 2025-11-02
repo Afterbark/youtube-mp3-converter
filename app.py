@@ -817,4 +817,257 @@ HOME_HTML = """
     const $ = (sel) => document.querySelector(sel);
     const statusDot = $('#statusDot');
     const statusText = $('#statusText');
+<<<<<<< HEAD
     const progress
+=======
+    const progressContainer = $('#progressContainer');
+    const toast = $('#toast');
+    const form = $('#form');
+    const urlInput = $('#url');
+    const convertBtn = $('#convertBtn');
+    const btnText = $('#btnText');
+    const healthBadge = $('#healthBadge');
+    const sampleLink = $('#sampleLink');
+
+    function setStatus(type, message, showSpinner = false) {
+      statusText.textContent = message;
+      statusDot.className = 'status-dot';
+      statusDot.classList.remove('active');
+      
+      if (type === 'ok') statusDot.classList.add('ok');
+      else if (type === 'warn') { statusDot.classList.add('warn'); statusDot.classList.add('active'); }
+      else if (type === 'err') statusDot.classList.add('err');
+      
+      if (showSpinner) {
+        statusText.innerHTML = `<div class="spinner" style="display: inline-block; vertical-align: middle; margin-right: 8px;"></div>${message}`;
+      }
+    }
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function isValidYouTubeURL(url) {
+      return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(url);
+    }
+
+    // Health check
+    fetch('/health')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.ok) {
+          healthBadge.className = 'health-badge';
+          healthBadge.innerHTML = '<div style="width: 8px; height: 8px; background: var(--ok); border-radius: 50%;"></div>Server Online';
+        } else {
+          throw new Error();
+        }
+      })
+      .catch(() => {
+        healthBadge.className = 'health-badge error';
+        healthBadge.textContent = 'Server Offline';
+      });
+
+    // Sample video
+    sampleLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      urlInput.value = 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
+      showToast('✨ Sample video loaded');
+      urlInput.focus();
+    });
+
+    // Queue system
+    async function tryEnqueue(url) {
+      try {
+        const resp = await fetch('/enqueue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ url })
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        return data.job_id || null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function pollJob(jobId) {
+      progressContainer.classList.add('show');
+      const startTime = Date.now();
+      
+      const interval = setInterval(async () => {
+        try {
+          const resp = await fetch('/status/' + jobId);
+          if (!resp.ok) {
+            clearInterval(interval);
+            setStatus('err', 'Status check failed');
+            progressContainer.classList.remove('show');
+            convertBtn.disabled = false;
+            btnText.textContent = 'Convert';
+            return;
+          }
+          
+          const status = await resp.json();
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          
+          if (status.status === 'done') {
+            clearInterval(interval);
+            progressContainer.classList.remove('show');
+            setStatus('ok', '✓ Ready! Starting download...');
+            convertBtn.disabled = false;
+            btnText.textContent = 'Convert';
+            showToast('🎉 Conversion complete!');
+            setTimeout(() => {
+              window.open('/download_job/' + jobId, '_blank');
+            }, 500);
+          } else if (status.status === 'error') {
+            clearInterval(interval);
+            progressContainer.classList.remove('show');
+            setStatus('err', status.error || 'Conversion failed');
+            convertBtn.disabled = false;
+            btnText.textContent = 'Convert';
+          } else {
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+            setStatus('warn', `Converting... ${timeStr}`, true);
+          }
+        } catch (e) {
+          clearInterval(interval);
+          progressContainer.classList.remove('show');
+          setStatus('err', 'Connection error');
+          convertBtn.disabled = false;
+          btnText.textContent = 'Convert';
+        }
+      }, 2000);
+    }
+
+    // Form submit
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const url = urlInput.value.trim();
+      if (!url) {
+        setStatus('warn', 'Please paste a YouTube URL');
+        urlInput.focus();
+        return;
+      }
+      
+      if (!isValidYouTubeURL(url)) {
+        setStatus('warn', 'Invalid YouTube URL');
+        showToast('❌ Please enter a valid YouTube link');
+        return;
+      }
+
+      convertBtn.disabled = true;
+      btnText.textContent = 'Processing...';
+      setStatus('warn', 'Queuing conversion...', true);
+
+      // Try queue system first
+      const jobId = await tryEnqueue(url);
+      
+      if (jobId) {
+        showToast('✓ Added to queue');
+        await pollJob(jobId);
+      } else {
+        // Fallback to direct download
+        setStatus('warn', 'Starting direct download...', true);
+        progressContainer.classList.add('show');
+        
+        const downloadUrl = '/download?url=' + encodeURIComponent(url);
+        window.open(downloadUrl, '_blank');
+        
+        setTimeout(() => {
+          progressContainer.classList.remove('show');
+          setStatus('ok', 'Download started in new tab');
+          convertBtn.disabled = false;
+          btnText.textContent = 'Convert';
+        }, 2000);
+      }
+    });
+
+    // Prefill from URL param
+    try {
+      const params = new URLSearchParams(location.search);
+      const urlParam = params.get('url');
+      if (urlParam) {
+        urlInput.value = urlParam;
+        setStatus('ok', 'URL loaded from link');
+      }
+    } catch (e) {}
+  </script>
+</body>
+</html>
+"""
+
+
+
+@app.get("/")
+def home():
+    return render_template_string(HOME_HTML)
+
+
+@app.get("/health")
+def health():
+    return jsonify({"ok": True})
+
+
+@app.route("/download", methods=["GET", "POST"])
+def download():
+    # Accept URL from GET ?url=... or POST form body
+    url = request.args.get("url") or request.form.get("url")
+    if not url:
+        return jsonify({"error": "missing url"}), 400
+
+    try:
+        cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
+
+        # 1) Download + initial title
+        title, mp3_path = download_audio_with_fallback(
+            url,
+            OUT_DEFAULT,
+            cookiefile=cookiefile,
+            dsid=YTDLP_DATA_SYNC_ID
+        )
+
+        # 2) If title missing/too generic -> try metadata-only yt-dlp
+        if not title or title.strip().lower() == "audio":
+            t2 = fetch_title_with_ytdlp(url, cookiefile, YTDLP_DATA_SYNC_ID)
+            if t2:
+                title = t2
+
+        # 3) If still missing -> try oEmbed (no cookies)
+        if not title or title.strip().lower() == "audio":
+            t3 = fetch_title_oembed(url)
+            if t3:
+                title = t3
+
+        safe_name = safe_filename(title or "audio", "mp3")
+        resp = send_file(
+            mp3_path,
+            mimetype="audio/mpeg",
+            as_attachment=True,
+            download_name=safe_name
+        )
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+
+        # optional background cleanup
+        def _cleanup(path):
+            try:
+                time.sleep(30)
+                Path(path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
+        return resp
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+
