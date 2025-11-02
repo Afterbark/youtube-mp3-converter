@@ -173,251 +173,783 @@ HOME_HTML = """
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>YouTube → MP3</title>
+  <title>YouTube → MP3 Converter</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root{
-      --bg:#0b0c10;
-      --card:#0f1115;
-      --text:#e6e8eb;
-      --muted:#9aa3ad;
-      --brand1:#6aa6ff;
-      --brand2:#4285f4;
-      --ok:#13b884;
-      --warn:#ffb020;
-      --err:#ef4444;
-      --border:#1b1e26;
-      --radius:18px;
-      --shadow:0 24px 60px rgba(0,0,0,.35);
-      --ring:0 0 0 2px rgba(106,166,255,.45);
+    :root {
+      --bg: #0a0e27;
+      --card: rgba(17, 24, 39, 0.7);
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --brand1: #8b5cf6;
+      --brand2: #ec4899;
+      --brand3: #3b82f6;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --err: #ef4444;
+      --glow: rgba(139, 92, 246, 0.4);
+      --glow2: rgba(236, 72, 153, 0.3);
     }
-    @media (prefers-color-scheme: light){
-      :root{
-        --bg:#f7f9fc;
-        --card:#ffffff;
-        --text:#0f1115;
-        --muted:#5f6b76;
-        --brand1:#3b7cff;
-        --brand2:#1f6bff;
-        --border:#e6ebf2;
-        --shadow:0 24px 60px rgba(10,22,37,.08);
-        --ring:0 0 0 2px rgba(31,107,255,.30);
-      }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
     }
-    *{box-sizing:border-box}
-    html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    .wrap{max-width:900px;margin:64px auto;padding:0 16px}
-    .hero{
-      display:flex;align-items:center;gap:14px;margin-bottom:18px
+    
+    /* Animated gradient background */
+    .bg-gradient {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background: 
+        radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.15), transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.15), transparent 50%),
+        radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1), transparent 70%);
+      animation: gradientShift 20s ease infinite;
     }
-    .logo{
-      width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--brand1),var(--brand2));
-      display:grid;place-items:center;color:#fff;font-weight:800;letter-spacing:.3px;box-shadow:0 10px 24px rgba(66,133,244,.35)
+    
+    @keyframes gradientShift {
+      0%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
+      50% { opacity: 0.8; transform: scale(1.1) rotate(5deg); }
     }
-    h1{margin:0;font-size:28px}
-    p.lead{margin:6px 0 24px;color:var(--muted)}
-    .card{
-      background:radial-gradient(1200px 400px at 20% -10%, rgba(66,133,244,.08), transparent 40%) , var(--card);
-      border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);
-      padding:22px;
+    
+    /* Floating orbs */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.3;
+      pointer-events: none;
+      z-index: 1;
+      animation: float 15s ease-in-out infinite;
     }
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    input[type="url"]{
-      flex:1;min-width:260px;padding:14px 16px;border:1px solid var(--border);background:transparent;color:var(--text);
-      border-radius:14px;outline:none;transition:box-shadow .2s,border .2s
+    
+    .orb1 {
+      width: 400px;
+      height: 400px;
+      background: var(--brand1);
+      top: -200px;
+      left: -200px;
+      animation-delay: 0s;
     }
-    input::placeholder{color:var(--muted)}
-    input:focus{box-shadow:var(--ring);border-color:transparent}
-    button{
-      padding:14px 18px;border:none;border-radius:14px;color:#fff;cursor:pointer;font-weight:700;
-      background:linear-gradient(135deg,var(--brand1),var(--brand2));box-shadow:0 10px 20px rgba(66,133,244,.35);
-      transition:transform .05s ease, filter .2s
+    
+    .orb2 {
+      width: 350px;
+      height: 350px;
+      background: var(--brand2);
+      bottom: -150px;
+      right: -150px;
+      animation-delay: 5s;
     }
-    button:active{transform:translateY(1px)}
-    .actions{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
-    .link{color:var(--brand2);text-decoration:none;font-weight:600}
-    .link:hover{text-decoration:underline}
-    .status{margin-top:14px;display:flex;align-items:center;gap:10px;color:var(--muted);min-height:24px}
-    .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
-    .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--err)}
-    .spinner{width:16px;height:16px;border-radius:50%;border:3px solid var(--muted);border-top-color:transparent;animation:spin .8s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .kitchen{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap}
-    .chip{border:1px solid var(--border);border-radius:9999px;padding:8px 12px;color:var(--muted)}
-    .foot{margin-top:18px;color:var(--muted);font-size:13px}
-    /* Toast */
-    .toast{
-      position:fixed;left:50%;bottom:28px;transform:translateX(-50%);padding:12px 16px;border-radius:12px;
-      background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);color:var(--text);opacity:0;pointer-events:none;
-      transition:opacity .25s, transform .25s;
+    
+    .orb3 {
+      width: 300px;
+      height: 300px;
+      background: var(--brand3);
+      top: 40%;
+      right: 10%;
+      animation-delay: 10s;
     }
-    .toast.show{opacity:1;transform:translate(-50%, -6px)}
-    /* Progress */
-    .progress{height:8px;border-radius:999px;background:rgba(127,127,127,.18);overflow:hidden;margin-top:12px;display:none}
-    .bar{height:100%;width:25%;background:linear-gradient(135deg,var(--brand1),var(--brand2));animation:bar 1.1s linear infinite}
-    @keyframes bar{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}
+    
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(50px, -50px) scale(1.1); }
+      66% { transform: translate(-30px, 30px) scale(0.9); }
+    }
+    
+    /* Main container */
+    .container {
+      position: relative;
+      z-index: 10;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 60px 24px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    
+    /* Header with logo animation */
+    .header {
+      text-align: center;
+      margin-bottom: 60px;
+      animation: fadeInDown 0.8s ease;
+    }
+    
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .logo-container {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+      position: relative;
+    }
+    
+    .logo {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, var(--brand1), var(--brand2));
+      border-radius: 24px;
+      display: grid;
+      place-items: center;
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      box-shadow: 
+        0 0 60px var(--glow),
+        0 20px 40px rgba(0, 0, 0, 0.4);
+      animation: logoFloat 3s ease-in-out infinite;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .logo::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+      transform: translateX(-100%);
+      animation: shine 3s ease infinite;
+    }
+    
+    @keyframes logoFloat {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-10px) rotate(2deg); }
+    }
+    
+    @keyframes shine {
+      0% { transform: translateX(-100%); }
+      50%, 100% { transform: translateX(200%); }
+    }
+    
+    h1 {
+      font-size: clamp(32px, 5vw, 48px);
+      font-weight: 800;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, var(--brand1), var(--brand2), var(--brand3));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: gradientText 5s ease infinite;
+      background-size: 200% 200%;
+    }
+    
+    @keyframes gradientText {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+    
+    .subtitle {
+      font-size: 18px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    
+    /* Main card with glassmorphism */
+    .card {
+      background: var(--card);
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 32px;
+      padding: 48px;
+      box-shadow: 
+        0 20px 60px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      animation: fadeInUp 0.8s ease 0.2s both;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+    }
+    
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Form styling */
+    .form-group {
+      margin-bottom: 24px;
+    }
+    
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      gap: 12px;
+    }
+    
+    input[type="url"] {
+      flex: 1;
+      padding: 18px 24px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      color: var(--text);
+      font-size: 16px;
+      outline: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    input[type="url"]::placeholder {
+      color: var(--muted);
+    }
+    
+    input[type="url"]:focus {
+      border-color: var(--brand1);
+      background: rgba(0, 0, 0, 0.4);
+      box-shadow: 0 0 0 4px var(--glow), 0 8px 24px rgba(0, 0, 0, 0.3);
+      transform: translateY(-2px);
+    }
+    
+    button {
+      padding: 18px 36px;
+      background: linear-gradient(135deg, var(--brand1), var(--brand2));
+      border: none;
+      border-radius: 16px;
+      color: white;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 8px 24px var(--glow2);
+      position: relative;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    
+    button::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px var(--glow2);
+    }
+    
+    button:hover::before {
+      opacity: 1;
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    /* Status indicator */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      margin-top: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      min-height: 60px;
+      transition: all 0.3s ease;
+    }
+    
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--muted);
+      position: relative;
+      flex-shrink: 0;
+    }
+    
+    .status-dot::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      border: 2px solid currentColor;
+      opacity: 0;
+      animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    
+    .status-dot.active::after {
+      opacity: 0.75;
+    }
+    
+    @keyframes ping {
+      75%, 100% { transform: scale(2); opacity: 0; }
+    }
+    
+    .status-dot.ok { background: var(--ok); color: var(--ok); }
+    .status-dot.warn { background: var(--warn); color: var(--warn); }
+    .status-dot.err { background: var(--err); color: var(--err); }
+    
+    .status-text {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 500;
+    }
+    
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      border-top-color: var(--brand1);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Progress bar */
+    .progress-container {
+      margin-top: 24px;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .progress-container.show {
+      display: block;
+      opacity: 1;
+    }
+    
+    .progress-bar {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--brand1), var(--brand2), var(--brand3));
+      background-size: 200% 100%;
+      border-radius: 999px;
+      animation: progressFlow 1.5s ease infinite;
+      width: 100%;
+    }
+    
+    @keyframes progressFlow {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    /* Features grid */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 32px;
+    }
+    
+    .feature {
+      padding: 16px 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      font-size: 14px;
+      color: var(--muted);
+      text-align: center;
+      transition: all 0.3s ease;
+      animation: fadeInUp 0.6s ease backwards;
+    }
+    
+    .feature:nth-child(1) { animation-delay: 0.3s; }
+    .feature:nth-child(2) { animation-delay: 0.4s; }
+    .feature:nth-child(3) { animation-delay: 0.5s; }
+    .feature:nth-child(4) { animation-delay: 0.6s; }
+    
+    .feature:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-2px);
+    }
+    
+    /* Actions row */
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+    
+    .link {
+      color: var(--brand1);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    
+    .link::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      width: 0;
+      height: 2px;
+      background: var(--brand1);
+      transition: width 0.3s ease;
+    }
+    
+    .link:hover::after {
+      width: 100%;
+    }
+    
+    .health-badge {
+      padding: 8px 16px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--ok);
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .health-badge.loading {
+      background: rgba(156, 163, 175, 0.1);
+      border-color: rgba(156, 163, 175, 0.3);
+      color: var(--muted);
+    }
+    
+    .health-badge.error {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: var(--err);
+    }
+    
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 16px 24px;
+      background: rgba(17, 24, 39, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 16px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      color: var(--text);
+      font-weight: 500;
+      z-index: 1000;
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 48px;
+      color: var(--muted);
+      font-size: 14px;
+      animation: fadeInUp 0.8s ease 0.4s both;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container { padding: 40px 16px; }
+      .card { padding: 32px 24px; }
+      h1 { font-size: 32px; }
+      .input-wrapper { flex-direction: column; }
+      button { width: 100%; }
+      .actions { flex-direction: column; align-items: stretch; }
+      .features { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="hero">
-      <div class="logo">MP3</div>
-      <div>
-        <h1>YouTube → MP3 (Heroku)</h1>
-        <p class="lead">Paste a YouTube link and wait for it to finish downloading.</p>
+  <div class="bg-gradient"></div>
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+
+  <div class="container">
+    <div class="header">
+      <div class="logo-container">
+        <div class="logo">MP3</div>
       </div>
+      <h1>YouTube → MP3 Converter</h1>
+      <p class="subtitle">Convert any YouTube video to high-quality MP3</p>
     </div>
 
     <div class="card">
-      <form id="form" class="row" autocomplete="off">
-        <input id="url" type="url" required placeholder="https://www.youtube.com/watch?v=..." />
-        <button id="go" type="submit">Convert</button>
+      <form id="form">
+        <div class="form-group">
+          <div class="input-wrapper">
+            <input 
+              id="url" 
+              type="url" 
+              required 
+              placeholder="Paste YouTube URL here..."
+              autocomplete="off"
+            />
+            <button id="convertBtn" type="submit">
+              <span id="btnText">Convert</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <div style="display: flex; gap: 16px; align-items: center;">
+            <a href="#" id="sampleLink" class="link">Try sample video</a>
+            <span class="health-badge loading" id="healthBadge">
+              <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
+              Checking...
+            </span>
+          </div>
+          <a href="chrome://extensions" class="link" target="_blank">Chrome Extension</a>
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-bar">
+            <div class="progress-fill"></div>
+          </div>
+        </div>
+
+        <div class="status">
+          <div class="status-dot" id="statusDot"></div>
+          <span class="status-text" id="statusText">Ready to convert</span>
+        </div>
       </form>
 
-      <div class="actions">
-        <div>
-          <a class="link" id="sample" href="#">Try a sample video</a>
-          <span class="chip" id="health">Checking server…</span>
-        </div>
-        <a class="link" href="chrome://extensions" id="ext" target="_blank" rel="noreferrer">Use the Chrome extension</a>
-      </div>
-
-      <div class="progress" id="progress"><div class="bar"></div></div>
-
-      <div class="status" id="status">
-        <div class="dot" id="dot"></div>
-        <span id="statustxt">Ready</span>
+      <div class="features">
+        <div class="feature">🎵 192 kbps MP3</div>
+        <div class="feature">⚡ Fast Processing</div>
+        <div class="feature">🔄 Smart Fallbacks</div>
+        <div class="feature">📱 Mobile Friendly</div>
       </div>
     </div>
 
-    <div class="kitchen">
-      <div class="chip">MP3 • 192 kbps</div>
-      <div class="chip">FFmpeg post-processing</div>
-      <div class="chip">Client fallbacks (web/ios/tv)</div>
-      <div class="chip">Queue & Poll for long videos</div>
+    <div class="footer">
+      <p>Powered by yt-dlp • FFmpeg • Heroku</p>
     </div>
-
-    <div class="foot">Tip: Long videos wont work.</div>
   </div>
 
   <div class="toast" id="toast"></div>
 
   <script>
-    const $ = (s) => document.querySelector(s);
-    const dot = $("#dot");
-    const txt = $("#statustxt");
-    const progress = $("#progress");
-    const toast = $("#toast");
-    const form = $("#form");
-    const urlInput = $("#url");
-    const healthChip = $("#health");
-    const sampleBtn = $("#sample");
+    const $ = (sel) => document.querySelector(sel);
+    const statusDot = $('#statusDot');
+    const statusText = $('#statusText');
+    const progressContainer = $('#progressContainer');
+    const toast = $('#toast');
+    const form = $('#form');
+    const urlInput = $('#url');
+    const convertBtn = $('#convertBtn');
+    const btnText = $('#btnText');
+    const healthBadge = $('#healthBadge');
+    const sampleLink = $('#sampleLink');
 
-    // --- helpers ---
-    const setStatus = (state, message) => {
-      txt.textContent = message || "";
-      dot.className = "dot";
-      if (state === "ok") dot.classList.add("ok");
-      else if (state === "warn") dot.classList.add("warn");
-      else if (state === "err") dot.classList.add("err");
-    };
-    const showToast = (msg) => {
-      toast.textContent = msg;
-      toast.classList.add("show");
-      setTimeout(()=> toast.classList.remove("show"), 2200);
-    };
-    const validYouTube = (u) => /^(https?:\\/\\/)?(www\\.)?(youtube\\.com|youtu\\.be)\\//i.test(u);
+    function setStatus(type, message, showSpinner = false) {
+      statusText.textContent = message;
+      statusDot.className = 'status-dot';
+      statusDot.classList.remove('active');
+      
+      if (type === 'ok') statusDot.classList.add('ok');
+      else if (type === 'warn') { statusDot.classList.add('warn'); statusDot.classList.add('active'); }
+      else if (type === 'err') statusDot.classList.add('err');
+      
+      if (showSpinner) {
+        statusText.innerHTML = `<div class="spinner" style="display: inline-block; vertical-align: middle; margin-right: 8px;"></div>${message}`;
+      }
+    }
 
-    // Health
-    fetch("/health").then(r => r.ok ? r.json(): null).then(data=>{
-      healthChip.textContent = (data && data.ok) ? "Server OK" : "Server check failed";
-    }).catch(()=> healthChip.textContent = "Server check failed");
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
 
-    // Sample link (stable chillhop stream ~long)
-    sampleBtn.addEventListener("click", (e)=>{
+    function isValidYouTubeURL(url) {
+      return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(url);
+    }
+
+    // Health check
+    fetch('/health')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.ok) {
+          healthBadge.className = 'health-badge';
+          healthBadge.innerHTML = '<div style="width: 8px; height: 8px; background: var(--ok); border-radius: 50%;"></div>Server Online';
+        } else {
+          throw new Error();
+        }
+      })
+      .catch(() => {
+        healthBadge.className = 'health-badge error';
+        healthBadge.textContent = 'Server Offline';
+      });
+
+    // Sample video
+    sampleLink.addEventListener('click', (e) => {
       e.preventDefault();
-      urlInput.value = "https://www.youtube.com/watch?v=JK_hBk2f01k";
-      showToast("Loaded sample video");
+      urlInput.value = 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
+      showToast('✨ Sample video loaded');
+      urlInput.focus();
     });
 
-    async function tryEnqueue(url){
-      try{
-        const resp = await fetch("/enqueue", {
-          method:"POST",
-          headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+    // Queue system
+    async function tryEnqueue(url) {
+      try {
+        const resp = await fetch('/enqueue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ url })
         });
-        if (!resp.ok) return null; // not supported, fall back
+        if (!resp.ok) return null;
         const data = await resp.json();
         return data.job_id || null;
-      }catch(e){ return null; }
+      } catch (e) {
+        return null;
+      }
     }
 
-    async function poll(jobId){
-      progress.style.display = "block";
-      const start = Date.now();
-      const iv = setInterval(async ()=>{
-        try{
-          const r = await fetch("/status/" + jobId);
-          if (!r.ok){ clearInterval(iv); setStatus("err","Status error"); progress.style.display="none"; return; }
-          const s = await r.json();
-          if (s.status === "done"){
-            clearInterval(iv);
-            setStatus("ok","Ready — starting download…");
-            progress.style.display = "none";
-            window.open("/download_job/" + jobId, "_blank");
-          } else if (s.status === "error"){
-            clearInterval(iv);
-            setStatus("err", s.error || "Conversion failed");
-            progress.style.display = "none";
-          } else {
-            // still working
-            const mins = Math.floor((Date.now() - start)/60000);
-            setStatus("warn", "Working…" + (mins ? " ("+mins+"m)" : ""));
+    async function pollJob(jobId) {
+      progressContainer.classList.add('show');
+      const startTime = Date.now();
+      
+      const interval = setInterval(async () => {
+        try {
+          const resp = await fetch('/status/' + jobId);
+          if (!resp.ok) {
+            clearInterval(interval);
+            setStatus('err', 'Status check failed');
+            progressContainer.classList.remove('show');
+            convertBtn.disabled = false;
+            btnText.textContent = 'Convert';
+            return;
           }
-        }catch(e){
-          clearInterval(iv);
-          setStatus("err","Status check failed");
-          progress.style.display = "none";
+          
+          const status = await resp.json();
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          
+          if (status.status === 'done') {
+            clearInterval(interval);
+            progressContainer.classList.remove('show');
+            setStatus('ok', '✓ Ready! Starting download...');
+            convertBtn.disabled = false;
+            btnText.textContent = 'Convert';
+            showToast('🎉 Conversion complete!');
+            setTimeout(() => {
+              window.open('/download_job/' + jobId, '_blank');
+            }, 500);
+          } else if (status.status === 'error') {
+            clearInterval(interval);
+            progressContainer.classList.remove('show');
+            setStatus('err', status.error || 'Conversion failed');
+            convertBtn.disabled = false;
+            btnText.textContent = 'Convert';
+          } else {
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+            setStatus('warn', `Converting... ${timeStr}`, true);
+          }
+        } catch (e) {
+          clearInterval(interval);
+          progressContainer.classList.remove('show');
+          setStatus('err', 'Connection error');
+          convertBtn.disabled = false;
+          btnText.textContent = 'Convert';
         }
-      }, 3000);
+      }, 2000);
     }
 
-    // Submit
-    form.addEventListener("submit", async (e)=>{
+    // Form submit
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      
       const url = urlInput.value.trim();
-      if (!url){ setStatus("warn","Please paste a YouTube URL"); urlInput.focus(); return; }
-      if (!validYouTube(url)){ setStatus("warn","That doesn’t look like a YouTube link"); return; }
-
-      // Try async queue first; if not available, fall back to direct download
-      setStatus("warn","Queuing…");
-      dot.className = "spinner";
-
-      const jobId = await tryEnqueue(url);
-      if (jobId){
-        showToast("Queued. You can stay on this page.");
-        await poll(jobId);
+      if (!url) {
+        setStatus('warn', 'Please paste a YouTube URL');
+        urlInput.focus();
+        return;
+      }
+      
+      if (!isValidYouTubeURL(url)) {
+        setStatus('warn', 'Invalid YouTube URL');
+        showToast('❌ Please enter a valid YouTube link');
         return;
       }
 
-      // Fallback: direct
-      setStatus("warn","Starting direct download…");
-      progress.style.display = "block";
-      const dl = "/download?url=" + encodeURIComponent(url);
-      window.open(dl, "_blank");
-      setTimeout(()=> {
-        progress.style.display="none";
-        setStatus("ok","If your download didn’t start, the queue mode is recommended for long videos.");
-      }, 1500);
+      convertBtn.disabled = true;
+      btnText.textContent = 'Processing...';
+      setStatus('warn', 'Queuing conversion...', true);
+
+      // Try queue system first
+      const jobId = await tryEnqueue(url);
+      
+      if (jobId) {
+        showToast('✓ Added to queue');
+        await pollJob(jobId);
+      } else {
+        // Fallback to direct download
+        setStatus('warn', 'Starting direct download...', true);
+        progressContainer.classList.add('show');
+        
+        const downloadUrl = '/download?url=' + encodeURIComponent(url);
+        window.open(downloadUrl, '_blank');
+        
+        setTimeout(() => {
+          progressContainer.classList.remove('show');
+          setStatus('ok', 'Download started in new tab');
+          convertBtn.disabled = false;
+          btnText.textContent = 'Convert';
+        }, 2000);
+      }
     });
 
-    // Prefill if URL param exists (?url=...)
-    try{
-      const qs = new URLSearchParams(location.search);
-      const u = qs.get("url");
-      if (u){ urlInput.value = u; setStatus("ok","URL prefilled"); }
-    }catch{}
+    // Prefill from URL param
+    try {
+      const params = new URLSearchParams(location.search);
+      const urlParam = params.get('url');
+      if (urlParam) {
+        urlInput.value = urlParam;
+        setStatus('ok', 'URL loaded from link');
+      }
+    } catch (e) {}
   </script>
 </body>
 </html>
