@@ -3,10 +3,12 @@ import base64
 import re
 import time
 import json
+import uuid
 import urllib.parse
 import urllib.request
 import threading
 from pathlib import Path
+from datetime import datetime
 from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
 import yt_dlp
@@ -15,59 +17,63 @@ from yt_dlp.utils import DownloadError, ExtractorError
 app = Flask(__name__)
 CORS(app)
 
-# ---------- Temp dir ----------
+# ---------- Configuration ----------
 DOWNLOAD_DIR = Path("/tmp")
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-# ---------- Cookies (optional but recommended) ----------
+# Cookie handling
 COOKIE_PATH = None
 _b64 = os.getenv("YTDLP_COOKIES_B64")
 if _b64:
     try:
         COOKIE_PATH = DOWNLOAD_DIR / "youtube_cookies.txt"
         COOKIE_PATH.write_bytes(base64.b64decode(_b64))
-        print(f"[init] Loaded cookies to {COOKIE_PATH}", flush=True)
+        print(f"✓ Loaded cookies to {COOKIE_PATH}", flush=True)
     except Exception as e:
-        print(f"[init] Failed to load cookies: {e}", flush=True)
+        print(f"✗ Failed to load cookies: {e}", flush=True)
 
-# ---------- Optional DSID to quiet web-client warnings ----------
-YTDLP_DATA_SYNC_ID = os.getenv("YTDLP_DATA_SYNC_ID")  # optional
-
-# Default output pattern (yt-dlp will write into /tmp via `paths`)
+YTDLP_DATA_SYNC_ID = os.getenv("YTDLP_DATA_SYNC_ID")
 OUT_DEFAULT = "yt_%(id)s.%(ext)s"
-
 SAFE_CHARS = re.compile(r"[^A-Za-z0-9 _.-]+")
 
-# Clients to try (broadest first to work around SABR/throttling)
+# Enhanced client list with more fallbacks
 CLIENTS_TO_TRY = [
     "web",
-    "web_safari",
+    "web_safari", 
     "web_embedded",
+    "tv_embedded",
     "tv",
     "ios",
     "android",
+    "mweb",
 ]
 
+# ---------- Job Queue System ----------
+job_queue = {}  # {job_id: {status, url, title, error, mp3_path, created_at}}
 
 def safe_filename(name: str, ext: str = "mp3") -> str:
+    """Sanitize filename for safe download."""
     name = SAFE_CHARS.sub("", name).strip() or "audio"
     return f"{name}.{ext}"
 
 
 def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str):
-    """Build yt-dlp options for a specific player client."""
+    """Build optimized yt-dlp options for a specific player client."""
     opts = {
         "format": "bestaudio/best",
         "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
         "outtmpl": {"default": out_default},
         "noprogress": True,
         "quiet": True,
+        "no_warnings": True,
         "noplaylist": True,
-        "retries": 3,
-        "fragment_retries": 3,
-        "extractor_retries": 3,   # retry metadata extraction too
-        "concurrent_fragment_downloads": 1,
+        "retries": 5,
+        "fragment_retries": 5,
+        "extractor_retries": 5,
+        "concurrent_fragment_downloads": 3,
         "geo_bypass": True,
+        "socket_timeout": 30,
+        "http_chunk_size": 10485760,  # 10MB chunks
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
@@ -75,20 +81,22 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         }],
         "extractor_args": {
             "youtube": {
-                "player_client": [client],      # try multiple clients
-                "player_skip": ["webpage"],
+                "player_client": [client],
+                "player_skip": ["webpage", "configs"],
                 **({"data_sync_id": [dsid]} if (dsid and client.startswith("web")) else {}),
             }
         },
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Origin": "https://www.youtube.com",
             "Referer": "https://www.youtube.com/",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "cross-site",
         },
-        # If IPv6 egress causes issues, uncomment:
-        # "force_ip": "0.0.0.0",
-        # If you still see throttling, you can try:
-        # "throttledratelimit": 102400,  # 100 KiB/s (lets yt-dlp detect & handle throttling)
     }
     if cookiefile:
         opts["cookiefile"] = cookiefile
@@ -98,7 +106,7 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
 def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
     """Get the final MP3 path after post-processing."""
     try:
-        pre = Path(ydl.prepare_filename(info))  # pre-postproc path (.webm/.m4a)
+        pre = Path(ydl.prepare_filename(info))
         cand = pre.with_suffix(".mp3")
         if cand.exists():
             return cand
@@ -139,9 +147,7 @@ def fetch_title_oembed(url: str):
         oembed = f"https://www.youtube.com/oembed?url={q}&format=json"
         with urllib.request.urlopen(oembed, timeout=6) as resp:
             data = json.loads(resp.read().decode("utf-8", errors="ignore"))
-            t = data.get("title")
-            if t:
-                return t
+            return data.get("title")
     except Exception:
         pass
     return None
@@ -150,24 +156,75 @@ def fetch_title_oembed(url: str):
 def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None):
     """Try multiple clients to avoid SABR/bot checks. Returns (title, mp3_path:str)."""
     last_err = None
-    for client in CLIENTS_TO_TRY:
+    for idx, client in enumerate(CLIENTS_TO_TRY):
         try:
-            print(f"[yt-dlp] trying client={client}", flush=True)
+            print(f"[yt-dlp] Attempt {idx+1}/{len(CLIENTS_TO_TRY)}: client={client}", flush=True)
             with yt_dlp.YoutubeDL(_base_ydl_opts(out_default, cookiefile, dsid, client)) as ydl:
                 info = ydl.extract_info(url, download=True)
                 title = info.get("title") or "audio"
                 mp3_path = _resolve_mp3_path(ydl, info)
+                print(f"✓ Success with client={client}", flush=True)
                 return title, str(mp3_path)
         except (DownloadError, ExtractorError, FileNotFoundError) as e:
             last_err = e
-            print(f"[yt-dlp] client={client} failed: {e}", flush=True)
+            print(f"✗ client={client} failed: {str(e)[:100]}", flush=True)
             continue
     if last_err:
         raise last_err
     raise RuntimeError("All extractor attempts failed")
 
 
-# ---------- Minimal UI for manual tests ----------
+def process_job(job_id: str, url: str):
+    """Background job processor."""
+    try:
+        job_queue[job_id]["status"] = "processing"
+        cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
+        
+        # Download with fallback
+        title, mp3_path = download_audio_with_fallback(
+            url, OUT_DEFAULT, cookiefile=cookiefile, dsid=YTDLP_DATA_SYNC_ID
+        )
+        
+        # Try to get better title if needed
+        if not title or title.strip().lower() == "audio":
+            t2 = fetch_title_with_ytdlp(url, cookiefile, YTDLP_DATA_SYNC_ID)
+            if t2:
+                title = t2
+        
+        if not title or title.strip().lower() == "audio":
+            t3 = fetch_title_oembed(url)
+            if t3:
+                title = t3
+        
+        job_queue[job_id].update({
+            "status": "done",
+            "title": title or "audio",
+            "mp3_path": mp3_path,
+        })
+        print(f"✓ Job {job_id} completed: {title}", flush=True)
+        
+        # Schedule cleanup after 5 minutes
+        def cleanup():
+            time.sleep(300)
+            try:
+                Path(mp3_path).unlink(missing_ok=True)
+                if job_id in job_queue:
+                    del job_queue[job_id]
+                print(f"🧹 Cleaned up job {job_id}", flush=True)
+            except Exception as e:
+                print(f"⚠ Cleanup error for {job_id}: {e}", flush=True)
+        
+        threading.Thread(target=cleanup, daemon=True).start()
+        
+    except Exception as e:
+        job_queue[job_id].update({
+            "status": "error",
+            "error": str(e)
+        })
+        print(f"✗ Job {job_id} failed: {e}", flush=True)
+
+
+# ---------- Enhanced HTML with Magnificent UI ----------
 HOME_HTML = """
 <!doctype html>
 <html lang="en">
@@ -203,7 +260,6 @@ HOME_HTML = """
       position: relative;
     }
     
-    /* Animated gradient background */
     .bg-gradient {
       position: fixed;
       inset: 0;
@@ -220,7 +276,6 @@ HOME_HTML = """
       50% { opacity: 0.8; transform: scale(1.1) rotate(5deg); }
     }
     
-    /* Floating orbs */
     .orb {
       position: fixed;
       border-radius: 50%;
@@ -264,7 +319,6 @@ HOME_HTML = """
       66% { transform: translate(-30px, 30px) scale(0.9); }
     }
     
-    /* Main container */
     .container {
       position: relative;
       z-index: 10;
@@ -277,7 +331,6 @@ HOME_HTML = """
       justify-content: center;
     }
     
-    /* Header with logo animation */
     .header {
       text-align: center;
       margin-bottom: 60px;
@@ -357,7 +410,6 @@ HOME_HTML = """
       font-weight: 500;
     }
     
-    /* Main card with glassmorphism */
     .card {
       background: var(--card);
       backdrop-filter: blur(20px) saturate(180%);
@@ -387,7 +439,6 @@ HOME_HTML = """
       to { opacity: 1; transform: translateY(0); }
     }
     
-    /* Form styling */
     .form-group {
       margin-bottom: 24px;
     }
@@ -465,7 +516,6 @@ HOME_HTML = """
       transform: none;
     }
     
-    /* Status indicator */
     .status {
       display: flex;
       align-items: center;
@@ -529,7 +579,6 @@ HOME_HTML = """
       to { transform: rotate(360deg); }
     }
     
-    /* Progress bar */
     .progress-container {
       margin-top: 24px;
       display: none;
@@ -564,7 +613,6 @@ HOME_HTML = """
       100% { transform: translateX(100%); }
     }
     
-    /* Features grid */
     .features {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -595,7 +643,6 @@ HOME_HTML = """
       transform: translateY(-2px);
     }
     
-    /* Actions row */
     .actions {
       display: flex;
       justify-content: space-between;
@@ -654,7 +701,6 @@ HOME_HTML = """
       color: var(--err);
     }
     
-    /* Toast notification */
     .toast {
       position: fixed;
       bottom: 32px;
@@ -678,7 +724,6 @@ HOME_HTML = """
       transform: translateX(-50%) translateY(0);
     }
     
-    /* Footer */
     .footer {
       text-align: center;
       margin-top: 48px;
@@ -687,7 +732,6 @@ HOME_HTML = """
       animation: fadeInUp 0.8s ease 0.4s both;
     }
     
-    /* Responsive */
     @media (max-width: 768px) {
       .container { padding: 40px 16px; }
       .card { padding: 32px 24px; }
@@ -711,7 +755,7 @@ HOME_HTML = """
         <div class="logo">MP3</div>
       </div>
       <h1>YouTube → MP3 Converter</h1>
-      <p class="subtitle">Convert any YouTube video to high-quality MP3</p>
+      <p class="subtitle">Convert any YouTube video to high-quality MP3 in seconds</p>
     </div>
 
     <div class="card">
@@ -732,7 +776,7 @@ HOME_HTML = """
         </div>
 
         <div class="actions">
-          <div style="display: flex; gap: 16px; align-items: center;">
+          <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
             <a href="#" id="sampleLink" class="link">Try sample video</a>
             <span class="health-badge loading" id="healthBadge">
               <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
@@ -756,14 +800,14 @@ HOME_HTML = """
 
       <div class="features">
         <div class="feature">🎵 192 kbps MP3</div>
-        <div class="feature">⚡ Fast Processing</div>
+        <div class="feature">⚡ Lightning Fast</div>
         <div class="feature">🔄 Smart Fallbacks</div>
         <div class="feature">📱 Mobile Friendly</div>
       </div>
     </div>
 
     <div class="footer">
-      <p>Powered by yt-dlp • FFmpeg • Heroku</p>
+      <p>Powered by yt-dlp • FFmpeg • Flask</p>
     </div>
   </div>
 
@@ -773,253 +817,4 @@ HOME_HTML = """
     const $ = (sel) => document.querySelector(sel);
     const statusDot = $('#statusDot');
     const statusText = $('#statusText');
-    const progressContainer = $('#progressContainer');
-    const toast = $('#toast');
-    const form = $('#form');
-    const urlInput = $('#url');
-    const convertBtn = $('#convertBtn');
-    const btnText = $('#btnText');
-    const healthBadge = $('#healthBadge');
-    const sampleLink = $('#sampleLink');
-
-    function setStatus(type, message, showSpinner = false) {
-      statusText.textContent = message;
-      statusDot.className = 'status-dot';
-      statusDot.classList.remove('active');
-      
-      if (type === 'ok') statusDot.classList.add('ok');
-      else if (type === 'warn') { statusDot.classList.add('warn'); statusDot.classList.add('active'); }
-      else if (type === 'err') statusDot.classList.add('err');
-      
-      if (showSpinner) {
-        statusText.innerHTML = `<div class="spinner" style="display: inline-block; vertical-align: middle; margin-right: 8px;"></div>${message}`;
-      }
-    }
-
-    function showToast(message) {
-      toast.textContent = message;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
-    }
-
-    function isValidYouTubeURL(url) {
-      return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(url);
-    }
-
-    // Health check
-    fetch('/health')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data && data.ok) {
-          healthBadge.className = 'health-badge';
-          healthBadge.innerHTML = '<div style="width: 8px; height: 8px; background: var(--ok); border-radius: 50%;"></div>Server Online';
-        } else {
-          throw new Error();
-        }
-      })
-      .catch(() => {
-        healthBadge.className = 'health-badge error';
-        healthBadge.textContent = 'Server Offline';
-      });
-
-    // Sample video
-    sampleLink.addEventListener('click', (e) => {
-      e.preventDefault();
-      urlInput.value = 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
-      showToast('✨ Sample video loaded');
-      urlInput.focus();
-    });
-
-    // Queue system
-    async function tryEnqueue(url) {
-      try {
-        const resp = await fetch('/enqueue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ url })
-        });
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        return data.job_id || null;
-      } catch (e) {
-        return null;
-      }
-    }
-
-    async function pollJob(jobId) {
-      progressContainer.classList.add('show');
-      const startTime = Date.now();
-      
-      const interval = setInterval(async () => {
-        try {
-          const resp = await fetch('/status/' + jobId);
-          if (!resp.ok) {
-            clearInterval(interval);
-            setStatus('err', 'Status check failed');
-            progressContainer.classList.remove('show');
-            convertBtn.disabled = false;
-            btnText.textContent = 'Convert';
-            return;
-          }
-          
-          const status = await resp.json();
-          const elapsed = Math.floor((Date.now() - startTime) / 1000);
-          
-          if (status.status === 'done') {
-            clearInterval(interval);
-            progressContainer.classList.remove('show');
-            setStatus('ok', '✓ Ready! Starting download...');
-            convertBtn.disabled = false;
-            btnText.textContent = 'Convert';
-            showToast('🎉 Conversion complete!');
-            setTimeout(() => {
-              window.open('/download_job/' + jobId, '_blank');
-            }, 500);
-          } else if (status.status === 'error') {
-            clearInterval(interval);
-            progressContainer.classList.remove('show');
-            setStatus('err', status.error || 'Conversion failed');
-            convertBtn.disabled = false;
-            btnText.textContent = 'Convert';
-          } else {
-            const minutes = Math.floor(elapsed / 60);
-            const seconds = elapsed % 60;
-            const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
-            setStatus('warn', `Converting... ${timeStr}`, true);
-          }
-        } catch (e) {
-          clearInterval(interval);
-          progressContainer.classList.remove('show');
-          setStatus('err', 'Connection error');
-          convertBtn.disabled = false;
-          btnText.textContent = 'Convert';
-        }
-      }, 2000);
-    }
-
-    // Form submit
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      
-      const url = urlInput.value.trim();
-      if (!url) {
-        setStatus('warn', 'Please paste a YouTube URL');
-        urlInput.focus();
-        return;
-      }
-      
-      if (!isValidYouTubeURL(url)) {
-        setStatus('warn', 'Invalid YouTube URL');
-        showToast('❌ Please enter a valid YouTube link');
-        return;
-      }
-
-      convertBtn.disabled = true;
-      btnText.textContent = 'Processing...';
-      setStatus('warn', 'Queuing conversion...', true);
-
-      // Try queue system first
-      const jobId = await tryEnqueue(url);
-      
-      if (jobId) {
-        showToast('✓ Added to queue');
-        await pollJob(jobId);
-      } else {
-        // Fallback to direct download
-        setStatus('warn', 'Starting direct download...', true);
-        progressContainer.classList.add('show');
-        
-        const downloadUrl = '/download?url=' + encodeURIComponent(url);
-        window.open(downloadUrl, '_blank');
-        
-        setTimeout(() => {
-          progressContainer.classList.remove('show');
-          setStatus('ok', 'Download started in new tab');
-          convertBtn.disabled = false;
-          btnText.textContent = 'Convert';
-        }, 2000);
-      }
-    });
-
-    // Prefill from URL param
-    try {
-      const params = new URLSearchParams(location.search);
-      const urlParam = params.get('url');
-      if (urlParam) {
-        urlInput.value = urlParam;
-        setStatus('ok', 'URL loaded from link');
-      }
-    } catch (e) {}
-  </script>
-</body>
-</html>
-"""
-
-
-
-@app.get("/")
-def home():
-    return render_template_string(HOME_HTML)
-
-
-@app.get("/health")
-def health():
-    return jsonify({"ok": True})
-
-
-@app.route("/download", methods=["GET", "POST"])
-def download():
-    # Accept URL from GET ?url=... or POST form body
-    url = request.args.get("url") or request.form.get("url")
-    if not url:
-        return jsonify({"error": "missing url"}), 400
-
-    try:
-        cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
-
-        # 1) Download + initial title
-        title, mp3_path = download_audio_with_fallback(
-            url,
-            OUT_DEFAULT,
-            cookiefile=cookiefile,
-            dsid=YTDLP_DATA_SYNC_ID
-        )
-
-        # 2) If title missing/too generic -> try metadata-only yt-dlp
-        if not title or title.strip().lower() == "audio":
-            t2 = fetch_title_with_ytdlp(url, cookiefile, YTDLP_DATA_SYNC_ID)
-            if t2:
-                title = t2
-
-        # 3) If still missing -> try oEmbed (no cookies)
-        if not title or title.strip().lower() == "audio":
-            t3 = fetch_title_oembed(url)
-            if t3:
-                title = t3
-
-        safe_name = safe_filename(title or "audio", "mp3")
-        resp = send_file(
-            mp3_path,
-            mimetype="audio/mpeg",
-            as_attachment=True,
-            download_name=safe_name
-        )
-        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
-
-        # optional background cleanup
-        def _cleanup(path):
-            try:
-                time.sleep(30)
-                Path(path).unlink(missing_ok=True)
-            except Exception:
-                pass
-
-        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
-        return resp
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+    const progress
