@@ -1,4 +1,4 @@
 Flask
-yt-dlp>=2024.10.0
 flask-cors
 gunicorn
+yt-dlp>=2024.11.4
