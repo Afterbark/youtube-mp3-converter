@@ -260,6 +260,7 @@ HOME_HTML = """
       position: relative;
     }
     
+    /* Animated gradient background */
     .bg-gradient {
       position: fixed;
       inset: 0;
@@ -276,6 +277,7 @@ HOME_HTML = """
       50% { opacity: 0.8; transform: scale(1.1) rotate(5deg); }
     }
     
+    /* Floating orbs */
     .orb {
       position: fixed;
       border-radius: 50%;
@@ -319,6 +321,7 @@ HOME_HTML = """
       66% { transform: translate(-30px, 30px) scale(0.9); }
     }
     
+    /* Main container */
     .container {
       position: relative;
       z-index: 10;
@@ -331,6 +334,7 @@ HOME_HTML = """
       justify-content: center;
     }
     
+    /* Header with logo animation */
     .header {
       text-align: center;
       margin-bottom: 60px;
@@ -410,6 +414,7 @@ HOME_HTML = """
       font-weight: 500;
     }
     
+    /* Main card with glassmorphism */
     .card {
       background: var(--card);
       backdrop-filter: blur(20px) saturate(180%);
@@ -439,6 +444,7 @@ HOME_HTML = """
       to { opacity: 1; transform: translateY(0); }
     }
     
+    /* Form styling */
     .form-group {
       margin-bottom: 24px;
     }
@@ -516,6 +522,7 @@ HOME_HTML = """
       transform: none;
     }
     
+    /* Status indicator */
     .status {
       display: flex;
       align-items: center;
@@ -579,6 +586,7 @@ HOME_HTML = """
       to { transform: rotate(360deg); }
     }
     
+    /* Progress bar */
     .progress-container {
       margin-top: 24px;
       display: none;
@@ -613,6 +621,7 @@ HOME_HTML = """
       100% { transform: translateX(100%); }
     }
     
+    /* Features grid */
     .features {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -643,6 +652,7 @@ HOME_HTML = """
       transform: translateY(-2px);
     }
     
+    /* Actions row */
     .actions {
       display: flex;
       justify-content: space-between;
@@ -701,6 +711,7 @@ HOME_HTML = """
       color: var(--err);
     }
     
+    /* Toast notification */
     .toast {
       position: fixed;
       bottom: 32px;
@@ -724,6 +735,7 @@ HOME_HTML = """
       transform: translateX(-50%) translateY(0);
     }
     
+    /* Footer */
     .footer {
       text-align: center;
       margin-top: 48px;
@@ -732,6 +744,7 @@ HOME_HTML = """
       animation: fadeInUp 0.8s ease 0.4s both;
     }
     
+    /* Responsive */
     @media (max-width: 768px) {
       .container { padding: 40px 16px; }
       .card { padding: 32px 24px; }
@@ -755,7 +768,7 @@ HOME_HTML = """
         <div class="logo">MP3</div>
       </div>
       <h1>YouTube → MP3 Converter</h1>
-      <p class="subtitle">Convert any YouTube video to high-quality MP3 in seconds</p>
+      <p class="subtitle">Convert any YouTube video to high-quality MP3</p>
     </div>
 
     <div class="card">
@@ -776,7 +789,7 @@ HOME_HTML = """
         </div>
 
         <div class="actions">
-          <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+          <div style="display: flex; gap: 16px; align-items: center;">
             <a href="#" id="sampleLink" class="link">Try sample video</a>
             <span class="health-badge loading" id="healthBadge">
               <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
@@ -800,14 +813,14 @@ HOME_HTML = """
 
       <div class="features">
         <div class="feature">🎵 192 kbps MP3</div>
-        <div class="feature">⚡ Lightning Fast</div>
+        <div class="feature">⚡ Fast Processing</div>
         <div class="feature">🔄 Smart Fallbacks</div>
         <div class="feature">📱 Mobile Friendly</div>
       </div>
     </div>
 
     <div class="footer">
-      <p>Powered by yt-dlp • FFmpeg • Flask</p>
+      <p>Powered by yt-dlp • FFmpeg • Heroku</p>
     </div>
   </div>
 
@@ -817,9 +830,6 @@ HOME_HTML = """
     const $ = (sel) => document.querySelector(sel);
     const statusDot = $('#statusDot');
     const statusText = $('#statusText');
-<<<<<<< HEAD
-    const progress
-=======
     const progressContainer = $('#progressContainer');
     const toast = $('#toast');
     const form = $('#form');
@@ -1001,7 +1011,6 @@ HOME_HTML = """
 </body>
 </html>
 """
-
 
 
 @app.get("/")
