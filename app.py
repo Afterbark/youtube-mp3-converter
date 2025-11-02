@@ -618,9 +618,3 @@ def download():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
-<<<<<<< HEAD
-    
-    
-=======
-
->>>>>>> f02937ddbb32cd69364fc689f21a390814633c0c
