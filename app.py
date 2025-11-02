@@ -445,7 +445,7 @@ HOME_HTML = """
     // Sample video
     sampleLink.addEventListener('click', (e) => {
       e.preventDefault();
-      urlInput.value = 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
+      urlInput.value = 'https://youtu.be/JK_hBk2f01k?list=RDJK_hBk2f01k';
       showToast('✨ Sample video loaded');
       urlInput.focus();
     });
