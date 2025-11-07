@@ -847,7 +847,7 @@ HOME_HTML = """
     }
 
     function isValidYouTubeURL(url) {
-      return /^(https?:\\/\\/)?( www\\.)?(youtube\\.com|youtu\\.be)\\//i.test(url);
+      return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(url);
     }
 
     fetch('/health')
