@@ -64,16 +64,16 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
         "outtmpl": {"default": out_default},
         "noprogress": True,
-        "quiet": True,
-        "no_warnings": True,
+        "quiet": False,
+        "no_warnings": False,
         "noplaylist": True,
-        "retries": 5,
-        "fragment_retries": 5,
-        "extractor_retries": 5,
-        "concurrent_fragment_downloads": 3,
+        "retries": 10,
+        "fragment_retries": 10,
+        "extractor_retries": 10,
+        "concurrent_fragment_downloads": 1,
         "geo_bypass": True,
         "socket_timeout": 30,
-        "http_chunk_size": 10485760,  # 10MB chunks
+        "http_chunk_size": 10485760,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
@@ -83,21 +83,26 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
             "youtube": {
                 "player_client": [client],
                 "player_skip": ["webpage", "configs"],
+                "skip": ["hls", "dash"],
                 **({"data_sync_id": [dsid]} if (dsid and client.startswith("web")) else {}),
             }
         },
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "User-Agent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)" if client == "ios" 
+                         else "com.google.android.youtube/19.29.37 (Linux; U; Android 14)" if client == "android"
+                         else "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1" if client == "tv_embedded"
+                         else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Origin": "https://www.youtube.com",
-            "Referer": "https://www.youtube.com/",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "cross-site",
         },
     }
+    
+    # Add web-specific headers
+    if client.startswith("web"):
+        opts["http_headers"]["Origin"] = "https://www.youtube.com"
+        opts["http_headers"]["Referer"] = "https://www.youtube.com/"
+        opts["http_headers"]["Accept-Encoding"] = "gzip, deflate, br"
+    
     if cookiefile:
         opts["cookiefile"] = cookiefile
     return opts
