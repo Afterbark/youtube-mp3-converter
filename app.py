@@ -951,29 +951,19 @@ HOME_HTML = """
         return;
       }
 
-      convertBtn.disabled = true;
-      btnText.textContent = 'Processing...';
-      setStatus('warn', 'Queuing conversion...', true);
-
-      const jobId = await tryEnqueue(url);
+      // Direct download approach - open in new tab
+      setStatus('warn', 'Starting conversion...', true);
+      progressContainer.classList.add('show');
       
-      if (jobId) {
-        showToast('✓ Added to queue');
-        await pollJob(jobId);
-      } else {
-        setStatus('warn', 'Starting direct download...', true);
-        progressContainer.classList.add('show');
-        
-        const downloadUrl = '/download?url=' + encodeURIComponent(url);
-        window.open(downloadUrl, '_blank');
-        
-        setTimeout(() => {
-          progressContainer.classList.remove('show');
-          setStatus('ok', 'Download started in new tab');
-          convertBtn.disabled = false;
-          btnText.textContent = 'Convert';
-        }, 2000);
-      }
+      const downloadUrl = '/download?url=' + encodeURIComponent(url);
+      window.open(downloadUrl, '_blank');
+      
+      showToast('✓ Conversion started in new tab');
+      
+      setTimeout(() => {
+        progressContainer.classList.remove('show');
+        setStatus('ok', 'Download should start automatically');
+      }, 3000);
     });
 
     try {
