@@ -958,19 +958,31 @@ HOME_HTML = """
         return;
       }
 
-      // Direct download approach - open in new tab
+      convertBtn.disabled = true;
+      btnText.textContent = 'Processing...';
       setStatus('warn', 'Starting conversion...', true);
-      progressContainer.classList.add('show');
+
+      // Try queue system first (for long videos)
+      const jobId = await tryEnqueue(url);
       
-      const downloadUrl = '/download?url=' + encodeURIComponent(url);
-      window.open(downloadUrl, '_blank');
-      
-      showToast('✓ Conversion started in new tab');
-      
-      setTimeout(() => {
-        progressContainer.classList.remove('show');
-        setStatus('ok', 'Download should start automatically');
-      }, 3000);
+      if (jobId) {
+        showToast('✓ Conversion queued - this may take a few minutes');
+        await pollJob(jobId);
+      } else {
+        // Fallback to direct download (for short videos)
+        setStatus('warn', 'Converting directly...', true);
+        progressContainer.classList.add('show');
+        
+        const downloadUrl = '/download?url=' + encodeURIComponent(url);
+        window.open(downloadUrl, '_blank');
+        
+        setTimeout(() => {
+          progressContainer.classList.remove('show');
+          setStatus('ok', 'Download started in new tab');
+          convertBtn.disabled = false;
+          btnText.textContent = 'Convert';
+        }, 3000);
+      }
     });
 
     try {
