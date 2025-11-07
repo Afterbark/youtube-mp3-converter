@@ -34,7 +34,7 @@ if _b64:
 
 YTDLP_DATA_SYNC_ID = os.getenv("YTDLP_DATA_SYNC_ID")
 OUT_DEFAULT = "yt_%(id)s.%(ext)s"
-SAFE_CHARS = re.compile(r"[^A-Za-z0-9 _.-]+")
+SAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')  # Only remove invalid filename chars
 
 # Enhanced client list - prioritize clients that work best
 CLIENTS_TO_TRY = [
