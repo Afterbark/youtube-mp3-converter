@@ -917,9 +917,9 @@ HOME_HTML = """
             convertBtn.disabled = false;
             btnText.textContent = 'Convert';
             showToast('🎉 Conversion complete!');
-            setTimeout(() => {
-              window.open('/download_job/' + jobId, '_blank');
-            }, 500);
+            
+            // Use direct location instead of window.open to avoid popup blocker
+            window.location.href = '/download_job/' + jobId;
           } else if (status.status === 'error') {
             clearInterval(interval);
             progressContainer.classList.remove('show');
