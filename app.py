@@ -36,16 +36,14 @@ YTDLP_DATA_SYNC_ID = os.getenv("YTDLP_DATA_SYNC_ID")
 OUT_DEFAULT = "yt_%(id)s.%(ext)s"
 SAFE_CHARS = re.compile(r"[^A-Za-z0-9 _.-]+")
 
-# Enhanced client list with ios/android prioritized to avoid SABR
+# Enhanced client list - prioritize clients that work best
 CLIENTS_TO_TRY = [
-    "ios",           # Best for avoiding SABR
-    "android",       # Second best
-    "tv_embedded",   # Good alternative
-    "web_creator",   # New client type
-    "mediaconnect",  # Another option
+    "android",       # Best option currently
+    "ios",
+    "tv_embedded",
+    "mediaconnect",
+    "mweb",
     "web",
-    "web_safari",
-    "web_embedded",
 ]
 
 # ---------- Job Queue System ----------
@@ -74,6 +72,8 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         "geo_bypass": True,
         "socket_timeout": 30,
         "http_chunk_size": 10485760,
+        "age_limit": None,
+        "nocheckcertificate": True,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
@@ -82,29 +82,21 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         "extractor_args": {
             "youtube": {
                 "player_client": [client],
-                "player_skip": ["webpage", "configs"],
-                "skip": ["hls", "dash"],
-                **({"data_sync_id": [dsid]} if (dsid and client.startswith("web")) else {}),
+                "player_skip": ["configs", "webpage"],
             }
         },
         "http_headers": {
-            "User-Agent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)" if client == "ios" 
-                         else "com.google.android.youtube/19.29.37 (Linux; U; Android 14)" if client == "android"
-                         else "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1" if client == "tv_embedded"
-                         else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Accept": "*/*",
+            "User-Agent": "com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip" if client == "android"
+                         else "com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)" if client == "ios"
+                         else "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1" if client == "tv_embedded"
+                         else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
     }
     
-    # Add web-specific headers
-    if client.startswith("web"):
-        opts["http_headers"]["Origin"] = "https://www.youtube.com"
-        opts["http_headers"]["Referer"] = "https://www.youtube.com/"
-        opts["http_headers"]["Accept-Encoding"] = "gzip, deflate, br"
-    
     if cookiefile:
         opts["cookiefile"] = cookiefile
+    
     return opts
 
 
