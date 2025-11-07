@@ -50,8 +50,15 @@ CLIENTS_TO_TRY = [
 job_queue = {}  # {job_id: {status, url, title, error, mp3_path, created_at}}
 
 def safe_filename(name: str, ext: str = "mp3") -> str:
-    """Sanitize filename for safe download."""
-    name = SAFE_CHARS.sub("", name).strip() or "audio"
+    """Sanitize filename for safe download - preserves Unicode characters."""
+    # Only remove characters that are invalid in filenames
+    # Keep Arabic, Chinese, Japanese, Korean, etc.
+    name = SAFE_CHARS.sub("_", name).strip() or "audio"
+    # Remove multiple spaces and leading/trailing spaces
+    name = " ".join(name.split())
+    # Limit length to 200 chars to be safe
+    if len(name) > 200:
+        name = name[:200].rsplit(' ', 1)[0]  # Cut at word boundary
     return f"{name}.{ext}"
 
 
@@ -864,7 +871,7 @@ HOME_HTML = """
 
     sampleLink.addEventListener('click', (e) => {
       e.preventDefault();
-      urlInput.value = 'https://www.youtube.com/watch?v=jfKfPfyJRdk';
+      urlInput.value = 'http://www.youtube.com/watch?v=JK_hBk2f01k';
       showToast('✨ Sample video loaded');
       urlInput.focus();
     });
