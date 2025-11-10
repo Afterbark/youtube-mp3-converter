@@ -475,46 +475,100 @@ HOME_HTML = """
       }
     }
     
-    /* 3D Logo */
+    /* Elegant Sound Wave Logo */
     .logo-container {
       display: inline-block;
       margin-bottom: 32px;
-      perspective: 1000px;
+      position: relative;
     }
     
-    .logo-3d {
+    .logo-wave {
       width: 120px;
       height: 120px;
       position: relative;
-      transform-style: preserve-3d;
-      animation: rotate3D 10s linear infinite;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(240, 171, 252, 0.1) 100%);
+      border-radius: 30px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 
+        0 8px 32px rgba(99, 102, 241, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      overflow: hidden;
     }
     
-    @keyframes rotate3D {
-      0% { transform: rotateX(0) rotateY(0) rotateZ(0); }
-      100% { transform: rotateX(360deg) rotateY(360deg) rotateZ(360deg); }
-    }
-    
-    .logo-face {
+    .logo-wave::before {
+      content: '';
       position: absolute;
-      width: 120px;
-      height: 120px;
-      background: var(--gradient-1);
-      border: 2px solid rgba(255, 255, 255, 0.2);
-      display: grid;
-      place-items: center;
-      font-size: 28px;
-      font-weight: 900;
-      color: white;
-      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+      inset: 0;
+      background: radial-gradient(circle at center, transparent 30%, rgba(99, 102, 241, 0.1) 100%);
+      animation: pulseGlow 3s ease-in-out infinite;
     }
     
-    .logo-face:nth-child(1) { transform: translateZ(60px); }
-    .logo-face:nth-child(2) { transform: rotateY(90deg) translateZ(60px); }
-    .logo-face:nth-child(3) { transform: rotateY(180deg) translateZ(60px); }
-    .logo-face:nth-child(4) { transform: rotateY(270deg) translateZ(60px); }
-    .logo-face:nth-child(5) { transform: rotateX(90deg) translateZ(60px); }
-    .logo-face:nth-child(6) { transform: rotateX(-90deg) translateZ(60px); }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+    
+    .sound-bars {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      height: 50px;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .sound-bar {
+      width: 6px;
+      background: var(--gradient-1);
+      border-radius: 3px;
+      animation: soundWave 1.2s ease-in-out infinite;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+    }
+    
+    .sound-bar:nth-child(1) { 
+      height: 20px; 
+      animation-delay: 0s;
+    }
+    .sound-bar:nth-child(2) { 
+      height: 35px; 
+      animation-delay: 0.1s;
+    }
+    .sound-bar:nth-child(3) { 
+      height: 45px; 
+      animation-delay: 0.2s;
+    }
+    .sound-bar:nth-child(4) { 
+      height: 40px; 
+      animation-delay: 0.3s;
+    }
+    .sound-bar:nth-child(5) { 
+      height: 30px; 
+      animation-delay: 0.4s;
+    }
+    .sound-bar:nth-child(6) { 
+      height: 25px; 
+      animation-delay: 0.5s;
+    }
+    .sound-bar:nth-child(7) { 
+      height: 35px; 
+      animation-delay: 0.6s;
+    }
+    
+    @keyframes soundWave {
+      0%, 100% { 
+        transform: scaleY(1);
+        opacity: 0.8;
+      }
+      50% { 
+        transform: scaleY(1.5);
+        opacity: 1;
+      }
+    }
     
     /* Animated Title */
     h1 {
@@ -1074,21 +1128,20 @@ HOME_HTML = """
       .action-group { flex-direction: column; width: 100%; }
       .action-link { width: 100%; text-align: center; }
       .features-grid { grid-template-columns: 1fr; }
-      .logo-3d { 
-        width: 80px; 
-        height: 80px; 
+      .logo-wave { 
+        width: 90px; 
+        height: 90px; 
       }
-      .logo-face {
-        width: 80px;
-        height: 80px;
-        font-size: 20px;
+      .sound-bars {
+        height: 40px;
       }
-      .logo-face:nth-child(1) { transform: translateZ(40px); }
-      .logo-face:nth-child(2) { transform: rotateY(90deg) translateZ(40px); }
-      .logo-face:nth-child(3) { transform: rotateY(180deg) translateZ(40px); }
-      .logo-face:nth-child(4) { transform: rotateY(270deg) translateZ(40px); }
-      .logo-face:nth-child(5) { transform: rotateX(90deg) translateZ(40px); }
-      .logo-face:nth-child(6) { transform: rotateX(-90deg) translateZ(40px); }
+      .sound-bar:nth-child(1) { height: 15px; }
+      .sound-bar:nth-child(2) { height: 25px; }
+      .sound-bar:nth-child(3) { height: 35px; }
+      .sound-bar:nth-child(4) { height: 30px; }
+      .sound-bar:nth-child(5) { height: 22px; }
+      .sound-bar:nth-child(6) { height: 18px; }
+      .sound-bar:nth-child(7) { height: 26px; }
     }
     
     @keyframes fadeInUp {
@@ -1151,13 +1204,16 @@ HOME_HTML = """
   <div class="container">
     <div class="header">
       <div class="logo-container">
-        <div class="logo-3d">
-          <div class="logo-face">MP3</div>
-          <div class="logo-face">🎵</div>
-          <div class="logo-face">MP3</div>
-          <div class="logo-face">🎧</div>
-          <div class="logo-face">♫</div>
-          <div class="logo-face">🎶</div>
+        <div class="logo-wave">
+          <div class="sound-bars">
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+          </div>
         </div>
       </div>
       <h1>YouTube → MP3 Converter</h1>
