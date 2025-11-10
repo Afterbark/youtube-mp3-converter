@@ -1250,7 +1250,7 @@ HOME_HTML = """
               <span>Checking...</span>
             </span>
           </div>
-          <a href="#" class="action-link">🚀 Browser Extension</a>
+          <a href="/chrome-extension" class="action-link" download>🚀 Browser Extension</a>
         </div>
 
         <div class="progress-wrapper" id="progressWrapper">
@@ -1565,6 +1565,31 @@ def health():
         "timestamp": datetime.utcnow().isoformat(),
         "active_jobs": len([j for j in job_queue.values() if j["status"] == "processing"])
     })
+
+
+@app.get("/chrome-extension")
+def download_extension():
+    """Download the Chrome extension ZIP file."""
+    import os
+    
+    # Look for the extension ZIP file
+    extension_paths = [
+        "/home/claude/youtube-mp3-extension.zip",
+        "./youtube-mp3-extension.zip",
+        "/tmp/youtube-mp3-extension.zip"
+    ]
+    
+    for path in extension_paths:
+        if os.path.exists(path):
+            return send_file(
+                path,
+                mimetype="application/zip",
+                as_attachment=True,
+                download_name="youtube-mp3-chrome-extension.zip"
+            )
+    
+    # If no zip file found, return error
+    return jsonify({"error": "Extension file not found"}), 404
 
 
 @app.route("/enqueue", methods=["POST"])
