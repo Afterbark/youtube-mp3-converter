@@ -234,99 +234,221 @@ HOME_HTML = """
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>YouTube → MP3 Converter</title>
+  <title>YouTube → MP3 | Premium Audio Converter</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0a0e27;
-      --card: rgba(17, 24, 39, 0.7);
-      --text: #f9fafb;
-      --muted: #9ca3af;
-      --brand1: #8b5cf6;
-      --brand2: #ec4899;
-      --brand3: #3b82f6;
-      --ok: #10b981;
-      --warn: #f59e0b;
-      --err: #ef4444;
-      --glow: rgba(139, 92, 246, 0.4);
-      --glow2: rgba(236, 72, 153, 0.3);
+      --bg: #050510;
+      --bg-dark: #010104;
+      --card: rgba(10, 10, 20, 0.6);
+      --card-hover: rgba(15, 15, 30, 0.7);
+      --text: #ffffff;
+      --text-dim: #b4b8c5;
+      --text-muted: #6b7280;
+      
+      --primary: #6366f1;
+      --primary-light: #818cf8;
+      --primary-dark: #4f46e5;
+      
+      --accent: #f0abfc;
+      --accent-2: #fbbf24;
+      --accent-3: #34d399;
+      
+      --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      --gradient-rainbow: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #6c5ce7);
+      
+      --success: #10b981;
+      --warning: #fbbf24;
+      --error: #ef4444;
+      
+      --glow-primary: 0 0 60px rgba(99, 102, 241, 0.5);
+      --glow-accent: 0 0 60px rgba(240, 171, 252, 0.4);
+      --glow-intense: 0 0 120px rgba(99, 102, 241, 0.6), 0 0 200px rgba(99, 102, 241, 0.3);
+      
+      --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.8);
+      --shadow-2xl: 0 25px 80px rgba(0, 0, 0, 0.9);
+      --shadow-glow: 0 0 100px rgba(99, 102, 241, 0.2);
+      
+      --border: rgba(255, 255, 255, 0.08);
+      --border-light: rgba(255, 255, 255, 0.15);
+      
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-slow: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     }
     
     * { box-sizing: border-box; margin: 0; padding: 0; }
     
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      background: var(--bg);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-dark);
       color: var(--text);
       min-height: 100vh;
       overflow-x: hidden;
       position: relative;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
     
-    .bg-gradient {
+    /* Animated Background */
+    .universe-bg {
       position: fixed;
       inset: 0;
       z-index: 0;
       background: 
-        radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.15), transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.15), transparent 50%),
-        radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1), transparent 70%);
-      animation: gradientShift 20s ease infinite;
+        radial-gradient(ellipse at top left, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+        radial-gradient(ellipse at bottom right, rgba(240, 171, 252, 0.15) 0%, transparent 40%),
+        radial-gradient(ellipse at center, rgba(79, 70, 229, 0.08) 0%, transparent 60%),
+        linear-gradient(180deg, var(--bg-dark) 0%, var(--bg) 100%);
     }
     
-    @keyframes gradientShift {
-      0%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
-      50% { opacity: 0.8; transform: scale(1.1) rotate(5deg); }
+    /* Animated Stars */
+    .stars {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+    
+    .star {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: white;
+      border-radius: 50%;
+      animation: twinkle 3s ease-in-out infinite;
+      box-shadow: 0 0 6px white;
+    }
+    
+    @keyframes twinkle {
+      0%, 100% { opacity: 0; transform: scale(0.5); }
+      50% { opacity: 1; transform: scale(1); }
+    }
+    
+    /* Floating Particles */
+    .particles {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    
+    .particle {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: var(--primary-light);
+      border-radius: 50%;
+      filter: blur(1px);
+      animation: floatUp 20s linear infinite;
+    }
+    
+    @keyframes floatUp {
+      0% { 
+        transform: translateY(100vh) translateX(0) scale(0);
+        opacity: 0;
+      }
+      10% {
+        opacity: 0.8;
+      }
+      90% {
+        opacity: 0.8;
+      }
+      100% { 
+        transform: translateY(-100vh) translateX(100px) scale(1.5);
+        opacity: 0;
+      }
+    }
+    
+    /* Gradient Orbs */
+    .gradient-orbs {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      filter: blur(100px);
+      opacity: 0.5;
     }
     
     .orb {
-      position: fixed;
+      position: absolute;
       border-radius: 50%;
-      filter: blur(80px);
-      opacity: 0.3;
-      pointer-events: none;
-      z-index: 1;
-      animation: float 15s ease-in-out infinite;
+      mix-blend-mode: screen;
     }
     
     .orb1 {
-      width: 400px;
-      height: 400px;
-      background: var(--brand1);
-      top: -200px;
-      left: -200px;
-      animation-delay: 0s;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+      top: -300px;
+      left: -300px;
+      animation: floatOrb1 25s ease-in-out infinite;
     }
     
     .orb2 {
-      width: 350px;
-      height: 350px;
-      background: var(--brand2);
-      bottom: -150px;
-      right: -150px;
-      animation-delay: 5s;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+      bottom: -250px;
+      right: -250px;
+      animation: floatOrb2 30s ease-in-out infinite;
     }
     
     .orb3 {
-      width: 300px;
-      height: 300px;
-      background: var(--brand3);
-      top: 40%;
-      right: 10%;
-      animation-delay: 10s;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, var(--accent-2) 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      animation: floatOrb3 35s ease-in-out infinite;
     }
     
-    @keyframes float {
-      0%, 100% { transform: translate(0, 0) scale(1); }
-      33% { transform: translate(50px, -50px) scale(1.1); }
-      66% { transform: translate(-30px, 30px) scale(0.9); }
+    @keyframes floatOrb1 {
+      0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+      33% { transform: translate(100px, 50px) scale(1.1) rotate(120deg); }
+      66% { transform: translate(-50px, 100px) scale(0.9) rotate(240deg); }
     }
     
+    @keyframes floatOrb2 {
+      0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+      33% { transform: translate(-100px, -50px) scale(1.2) rotate(-120deg); }
+      66% { transform: translate(50px, -100px) scale(0.8) rotate(-240deg); }
+    }
+    
+    @keyframes floatOrb3 {
+      0%, 100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+      25% { transform: translate(-45%, -55%) scale(1.1) rotate(90deg); }
+      50% { transform: translate(-55%, -45%) scale(0.9) rotate(180deg); }
+      75% { transform: translate(-45%, -50%) scale(1.05) rotate(270deg); }
+    }
+    
+    /* Grid Effect */
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      background-image: 
+        linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+      animation: gridMove 20s linear infinite;
+    }
+    
+    @keyframes gridMove {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(50px, 50px); }
+    }
+    
+    /* Main Container */
     .container {
       position: relative;
       z-index: 10;
-      max-width: 1000px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 60px 24px;
       min-height: 100vh;
@@ -335,246 +457,542 @@ HOME_HTML = """
       justify-content: center;
     }
     
+    /* Header */
     .header {
       text-align: center;
       margin-bottom: 60px;
-      animation: fadeInDown 0.8s ease;
+      animation: fadeInDown 1s ease;
     }
     
     @keyframes fadeInDown {
-      from { opacity: 0; transform: translateY(-30px); }
-      to { opacity: 1; transform: translateY(0); }
+      from { 
+        opacity: 0; 
+        transform: translateY(-40px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0);
+      }
     }
     
+    /* 3D Logo */
     .logo-container {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 24px;
-      position: relative;
+      display: inline-block;
+      margin-bottom: 32px;
+      perspective: 1000px;
     }
     
-    .logo {
-      width: 80px;
-      height: 80px;
-      background: linear-gradient(135deg, var(--brand1), var(--brand2));
-      border-radius: 24px;
+    .logo-3d {
+      width: 120px;
+      height: 120px;
+      position: relative;
+      transform-style: preserve-3d;
+      animation: rotate3D 10s linear infinite;
+    }
+    
+    @keyframes rotate3D {
+      0% { transform: rotateX(0) rotateY(0) rotateZ(0); }
+      100% { transform: rotateX(360deg) rotateY(360deg) rotateZ(360deg); }
+    }
+    
+    .logo-face {
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      background: var(--gradient-1);
+      border: 2px solid rgba(255, 255, 255, 0.2);
       display: grid;
       place-items: center;
-      font-size: 32px;
+      font-size: 28px;
       font-weight: 900;
-      letter-spacing: 1px;
-      box-shadow: 
-        0 0 60px var(--glow),
-        0 20px 40px rgba(0, 0, 0, 0.4);
-      animation: logoFloat 3s ease-in-out infinite;
-      position: relative;
-      overflow: hidden;
+      color: white;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
     }
     
-    .logo::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-      transform: translateX(-100%);
-      animation: shine 3s ease infinite;
-    }
+    .logo-face:nth-child(1) { transform: translateZ(60px); }
+    .logo-face:nth-child(2) { transform: rotateY(90deg) translateZ(60px); }
+    .logo-face:nth-child(3) { transform: rotateY(180deg) translateZ(60px); }
+    .logo-face:nth-child(4) { transform: rotateY(270deg) translateZ(60px); }
+    .logo-face:nth-child(5) { transform: rotateX(90deg) translateZ(60px); }
+    .logo-face:nth-child(6) { transform: rotateX(-90deg) translateZ(60px); }
     
-    @keyframes logoFloat {
-      0%, 100% { transform: translateY(0) rotate(0deg); }
-      50% { transform: translateY(-10px) rotate(2deg); }
-    }
-    
-    @keyframes shine {
-      0% { transform: translateX(-100%); }
-      50%, 100% { transform: translateX(200%); }
-    }
-    
+    /* Animated Title */
     h1 {
-      font-size: clamp(32px, 5vw, 48px);
-      font-weight: 800;
-      margin-bottom: 12px;
-      background: linear-gradient(135deg, var(--brand1), var(--brand2), var(--brand3));
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 900;
+      margin-bottom: 16px;
+      background: var(--gradient-rainbow);
+      background-size: 200% auto;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      animation: gradientText 5s ease infinite;
-      background-size: 200% 200%;
+      animation: shimmer 3s linear infinite;
+      letter-spacing: -2px;
+      line-height: 1;
     }
     
-    @keyframes gradientText {
-      0%, 100% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
+    @keyframes shimmer {
+      0% { background-position: 0% center; }
+      100% { background-position: 200% center; }
     }
     
     .subtitle {
-      font-size: 18px;
-      color: var(--muted);
+      font-size: 20px;
+      color: var(--text-dim);
       font-weight: 500;
+      letter-spacing: 0.5px;
+      animation: fadeIn 1s ease 0.3s both;
     }
     
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    /* Glassmorphism Card */
     .card {
-      background: var(--card);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
       backdrop-filter: blur(20px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--border);
       border-radius: 32px;
-      padding: 48px;
+      padding: 56px;
       box-shadow: 
-        0 20px 60px rgba(0, 0, 0, 0.5),
+        var(--shadow-2xl),
+        var(--shadow-glow),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      animation: fadeInUp 0.8s ease 0.2s both;
+      animation: cardEntrance 0.8s ease 0.2s both;
       position: relative;
       overflow: hidden;
+      transition: var(--transition);
+    }
+    
+    @keyframes cardEntrance {
+      from { 
+        opacity: 0; 
+        transform: translateY(40px) scale(0.95);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1);
+      }
     }
     
     .card::before {
       content: '';
       position: absolute;
       top: 0;
-      left: 0;
-      right: 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+      left: -100%;
+      width: 100%;
+      height: 2px;
+      background: var(--gradient-rainbow);
+      animation: scanLine 3s linear infinite;
     }
     
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(30px); }
-      to { opacity: 1; transform: translateY(0); }
+    @keyframes scanLine {
+      0% { left: -100%; }
+      100% { left: 100%; }
     }
     
-    .form-group {
-      margin-bottom: 24px;
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        var(--shadow-2xl),
+        var(--glow-intense),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      border-color: var(--border-light);
+    }
+    
+    /* Input Group */
+    .input-group {
+      margin-bottom: 32px;
+      position: relative;
     }
     
     .input-wrapper {
-      position: relative;
       display: flex;
-      gap: 12px;
+      gap: 16px;
+      position: relative;
+    }
+    
+    .input-field {
+      flex: 1;
+      position: relative;
     }
     
     input[type="url"] {
-      flex: 1;
-      padding: 18px 24px;
-      background: rgba(0, 0, 0, 0.3);
-      border: 2px solid rgba(255, 255, 255, 0.1);
-      border-radius: 16px;
+      width: 100%;
+      padding: 20px 24px;
+      padding-left: 56px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px solid var(--border);
+      border-radius: 20px;
       color: var(--text);
       font-size: 16px;
+      font-weight: 500;
       outline: none;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: var(--transition);
+      letter-spacing: 0.3px;
     }
     
     input[type="url"]::placeholder {
-      color: var(--muted);
+      color: var(--text-muted);
+      font-weight: 400;
     }
     
     input[type="url"]:focus {
-      border-color: var(--brand1);
-      background: rgba(0, 0, 0, 0.4);
-      box-shadow: 0 0 0 4px var(--glow), 0 8px 24px rgba(0, 0, 0, 0.3);
-      transform: translateY(-2px);
+      border-color: var(--primary);
+      background: rgba(0, 0, 0, 0.6);
+      box-shadow: 
+        0 0 0 4px rgba(99, 102, 241, 0.1),
+        var(--glow-primary);
+      transform: translateY(-1px);
     }
     
-    button {
-      padding: 18px 36px;
-      background: linear-gradient(135deg, var(--brand1), var(--brand2));
+    /* Input Icon */
+    .input-icon {
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      color: var(--text-muted);
+      transition: var(--transition);
+    }
+    
+    input:focus ~ .input-icon {
+      color: var(--primary);
+    }
+    
+    /* Animated Button */
+    .btn-convert {
+      padding: 20px 48px;
+      background: var(--gradient-1);
       border: none;
-      border-radius: 16px;
+      border-radius: 20px;
       color: white;
       font-size: 16px;
       font-weight: 700;
       cursor: pointer;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 8px 24px var(--glow2);
+      transition: var(--transition-bounce);
+      box-shadow: 
+        0 10px 30px rgba(99, 102, 241, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
       position: relative;
       overflow: hidden;
+      text-transform: uppercase;
+      letter-spacing: 1px;
       white-space: nowrap;
     }
     
-    button::before {
+    .btn-convert::before {
       content: '';
       position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent);
-      opacity: 0;
-      transition: opacity 0.3s;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      transition: left 0.5s;
     }
     
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 32px var(--glow2);
+    .btn-convert:hover::before {
+      left: 100%;
     }
     
-    button:hover::before {
-      opacity: 1;
+    .btn-convert:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 
+        0 15px 40px rgba(99, 102, 241, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
     }
     
-    button:active {
-      transform: translateY(0);
+    .btn-convert:active {
+      transform: translateY(-1px) scale(1);
     }
     
-    button:disabled {
-      opacity: 0.5;
+    .btn-convert:disabled {
+      opacity: 0.6;
       cursor: not-allowed;
       transform: none;
     }
     
-    .status {
+    /* Status Display */
+    .status-display {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 16px 20px;
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 12px;
-      margin-top: 24px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      min-height: 60px;
-      transition: all 0.3s ease;
+      gap: 16px;
+      padding: 20px 24px;
+      background: linear-gradient(135deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      margin-top: 32px;
+      min-height: 70px;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
     }
     
-    .status-dot {
+    .status-display::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--primary-light), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    
+    .status-display.active::after {
+      opacity: 1;
+      animation: shimmerLine 2s linear infinite;
+    }
+    
+    @keyframes shimmerLine {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    /* Status Indicator */
+    .status-indicator {
       width: 12px;
       height: 12px;
       border-radius: 50%;
-      background: var(--muted);
+      background: var(--text-muted);
       position: relative;
       flex-shrink: 0;
+      transition: var(--transition);
     }
     
-    .status-dot::after {
+    .status-indicator::before {
       content: '';
       position: absolute;
-      inset: -4px;
+      inset: -6px;
       border-radius: 50%;
-      border: 2px solid currentColor;
-      opacity: 0;
-      animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+      background: inherit;
+      opacity: 0.3;
+      animation: pulse 2s ease-in-out infinite;
     }
     
-    .status-dot.active::after {
-      opacity: 0.75;
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 0.3; }
+      50% { transform: scale(1.5); opacity: 0; }
     }
     
-    @keyframes ping {
-      75%, 100% { transform: scale(2); opacity: 0; }
-    }
-    
-    .status-dot.ok { background: var(--ok); color: var(--ok); }
-    .status-dot.warn { background: var(--warn); color: var(--warn); }
-    .status-dot.err { background: var(--err); color: var(--err); }
+    .status-indicator.ready { background: var(--text-muted); }
+    .status-indicator.processing { background: var(--warning); }
+    .status-indicator.success { background: var(--success); }
+    .status-indicator.error { background: var(--error); }
     
     .status-text {
       flex: 1;
       font-size: 15px;
       font-weight: 500;
+      color: var(--text-dim);
+      letter-spacing: 0.3px;
     }
     
+    /* Progress Bar */
+    .progress-wrapper {
+      margin-top: 32px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: var(--transition);
+    }
+    
+    .progress-wrapper.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid var(--border);
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: var(--gradient-rainbow);
+      background-size: 200% 100%;
+      border-radius: 999px;
+      animation: progressMove 2s linear infinite, shimmer 2s linear infinite;
+      width: 100%;
+      transform-origin: left;
+    }
+    
+    @keyframes progressMove {
+      0% { transform: scaleX(0) translateX(0); }
+      50% { transform: scaleX(1) translateX(0); }
+      100% { transform: scaleX(1) translateX(100%); }
+    }
+    
+    /* Feature Cards */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 40px;
+    }
+    
+    .feature-card {
+      padding: 24px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      text-align: center;
+      transition: var(--transition);
+      animation: featureFloat 6s ease-in-out infinite;
+      animation-delay: calc(var(--i) * 0.2s);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+      transform: translate(-50%, -50%) scale(0);
+      opacity: 0;
+      transition: var(--transition);
+    }
+    
+    .feature-card:hover::before {
+      transform: translate(-50%, -50%) scale(2);
+      opacity: 0.1;
+    }
+    
+    @keyframes featureFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    
+    .feature-card:hover {
+      transform: translateY(-5px) scale(1.02);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+      border-color: var(--primary);
+      box-shadow: var(--glow-primary);
+    }
+    
+    .feature-icon {
+      font-size: 36px;
+      margin-bottom: 12px;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+      animation: iconRotate 4s ease-in-out infinite;
+      animation-delay: calc(var(--i) * 0.3s);
+    }
+    
+    @keyframes iconRotate {
+      0%, 100% { transform: rotate(0deg) scale(1); }
+      25% { transform: rotate(5deg) scale(1.1); }
+      75% { transform: rotate(-5deg) scale(1.1); }
+    }
+    
+    .feature-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    
+    .feature-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    
+    /* Quick Actions */
+    .quick-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      margin-top: 32px;
+      flex-wrap: wrap;
+    }
+    
+    .action-group {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    
+    .action-link {
+      color: var(--primary-light);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: var(--transition);
+      position: relative;
+      padding: 8px 16px;
+      border-radius: 8px;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid transparent;
+    }
+    
+    .action-link:hover {
+      background: rgba(99, 102, 241, 0.2);
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+    
+    /* Health Badge */
+    .health-badge {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--success);
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      transition: var(--transition);
+    }
+    
+    .health-badge.loading {
+      background: linear-gradient(135deg, rgba(156, 163, 175, 0.1) 0%, rgba(156, 163, 175, 0.05) 100%);
+      border-color: rgba(156, 163, 175, 0.3);
+      color: var(--text-muted);
+    }
+    
+    .health-badge.error {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: var(--error);
+    }
+    
+    .health-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 2s ease-in-out infinite;
+    }
+    
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    
+    /* Spinner */
     .spinner {
       width: 20px;
       height: 20px;
-      border: 3px solid rgba(255, 255, 255, 0.2);
-      border-top-color: var(--brand1);
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--primary);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
@@ -583,245 +1001,262 @@ HOME_HTML = """
       to { transform: rotate(360deg); }
     }
     
-    .progress-container {
-      margin-top: 24px;
-      display: none;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    }
-    
-    .progress-container.show {
-      display: block;
-      opacity: 1;
-    }
-    
-    .progress-bar {
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 999px;
-      overflow: hidden;
-      position: relative;
-    }
-    
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--brand1), var(--brand2), var(--brand3));
-      background-size: 200% 100%;
-      border-radius: 999px;
-      animation: progressFlow 1.5s ease infinite;
-      width: 100%;
-    }
-    
-    @keyframes progressFlow {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
-    }
-    
-    .features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-top: 32px;
-    }
-    
-    .feature {
-      padding: 16px 20px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 12px;
-      font-size: 14px;
-      color: var(--muted);
-      text-align: center;
-      transition: all 0.3s ease;
-      animation: fadeInUp 0.6s ease backwards;
-    }
-    
-    .feature:nth-child(1) { animation-delay: 0.3s; }
-    .feature:nth-child(2) { animation-delay: 0.4s; }
-    .feature:nth-child(3) { animation-delay: 0.5s; }
-    .feature:nth-child(4) { animation-delay: 0.6s; }
-    
-    .feature:hover {
-      background: rgba(255, 255, 255, 0.05);
-      border-color: rgba(255, 255, 255, 0.15);
-      transform: translateY(-2px);
-    }
-    
-    .actions {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      margin-top: 24px;
-      flex-wrap: wrap;
-    }
-    
-    .link {
-      color: var(--brand1);
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 14px;
-      transition: all 0.2s ease;
-      position: relative;
-    }
-    
-    .link::after {
-      content: '';
-      position: absolute;
-      bottom: -2px;
-      left: 0;
-      width: 0;
-      height: 2px;
-      background: var(--brand1);
-      transition: width 0.3s ease;
-    }
-    
-    .link:hover::after {
-      width: 100%;
-    }
-    
-    .health-badge {
-      padding: 8px 16px;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      border-radius: 999px;
-      font-size: 13px;
-      color: var(--ok);
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .health-badge.loading {
-      background: rgba(156, 163, 175, 0.1);
-      border-color: rgba(156, 163, 175, 0.3);
-      color: var(--muted);
-    }
-    
-    .health-badge.error {
-      background: rgba(239, 68, 68, 0.1);
-      border-color: rgba(239, 68, 68, 0.3);
-      color: var(--err);
-    }
-    
+    /* Toast Notification */
     .toast {
       position: fixed;
-      bottom: 32px;
+      bottom: 40px;
       left: 50%;
-      transform: translateX(-50%) translateY(100px);
-      padding: 16px 24px;
-      background: rgba(17, 24, 39, 0.95);
+      transform: translateX(-50%) translateY(100px) scale(0.9);
+      padding: 20px 32px;
+      background: linear-gradient(135deg, rgba(17, 24, 39, 0.95) 0%, rgba(10, 10, 20, 0.95) 100%);
       backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 16px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border-light);
+      border-radius: 20px;
+      box-shadow: 
+        var(--shadow-2xl),
+        var(--glow-primary);
       color: var(--text);
       font-weight: 500;
       z-index: 1000;
       opacity: 0;
-      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: var(--transition-bounce);
+      font-size: 15px;
+      letter-spacing: 0.3px;
     }
     
     .toast.show {
       opacity: 1;
-      transform: translateX(-50%) translateY(0);
+      transform: translateX(-50%) translateY(0) scale(1);
     }
     
+    /* Footer */
     .footer {
       text-align: center;
-      margin-top: 48px;
-      color: var(--muted);
-      font-size: 14px;
-      animation: fadeInUp 0.8s ease 0.4s both;
+      margin-top: 60px;
+      padding-top: 40px;
+      border-top: 1px solid var(--border);
+      animation: fadeInUp 0.8s ease 0.6s both;
     }
     
+    .footer-text {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    
+    .footer-link {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 13px;
+      transition: var(--transition);
+      position: relative;
+    }
+    
+    .footer-link:hover {
+      color: var(--primary-light);
+    }
+    
+    /* Responsive Design */
     @media (max-width: 768px) {
-      .container { padding: 40px 16px; }
-      .card { padding: 32px 24px; }
-      h1 { font-size: 32px; }
+      .container { padding: 40px 20px; }
+      .card { padding: 40px 28px; }
+      h1 { font-size: 36px; }
       .input-wrapper { flex-direction: column; }
-      button { width: 100%; }
-      .actions { flex-direction: column; align-items: stretch; }
-      .features { grid-template-columns: 1fr; }
+      .btn-convert { width: 100%; }
+      .quick-actions { flex-direction: column; align-items: stretch; }
+      .action-group { flex-direction: column; width: 100%; }
+      .action-link { width: 100%; text-align: center; }
+      .features-grid { grid-template-columns: 1fr; }
+      .logo-3d { 
+        width: 80px; 
+        height: 80px; 
+      }
+      .logo-face {
+        width: 80px;
+        height: 80px;
+        font-size: 20px;
+      }
+      .logo-face:nth-child(1) { transform: translateZ(40px); }
+      .logo-face:nth-child(2) { transform: rotateY(90deg) translateZ(40px); }
+      .logo-face:nth-child(3) { transform: rotateY(180deg) translateZ(40px); }
+      .logo-face:nth-child(4) { transform: rotateY(270deg) translateZ(40px); }
+      .logo-face:nth-child(5) { transform: rotateX(90deg) translateZ(40px); }
+      .logo-face:nth-child(6) { transform: rotateX(-90deg) translateZ(40px); }
+    }
+    
+    @keyframes fadeInUp {
+      from { 
+        opacity: 0; 
+        transform: translateY(30px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0);
+      }
+    }
+    
+    /* Loading Animation */
+    .loading-dots {
+      display: inline-flex;
+      gap: 4px;
+    }
+    
+    .loading-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--primary);
+      border-radius: 50%;
+      animation: loadingBounce 1.4s ease-in-out infinite;
+    }
+    
+    .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+    .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+    
+    @keyframes loadingBounce {
+      0%, 80%, 100% { 
+        transform: scale(0);
+        opacity: 0.5;
+      }
+      40% { 
+        transform: scale(1);
+        opacity: 1;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="bg-gradient"></div>
-  <div class="orb orb1"></div>
-  <div class="orb orb2"></div>
-  <div class="orb orb3"></div>
+  <!-- Animated Background Layers -->
+  <div class="universe-bg"></div>
+  <div class="grid-bg"></div>
+  <div class="gradient-orbs">
+    <div class="orb orb1"></div>
+    <div class="orb orb2"></div>
+    <div class="orb orb3"></div>
+  </div>
+  
+  <!-- Stars Background -->
+  <div class="stars" id="stars"></div>
+  
+  <!-- Floating Particles -->
+  <div class="particles" id="particles"></div>
 
+  <!-- Main Content -->
   <div class="container">
     <div class="header">
       <div class="logo-container">
-        <div class="logo">MP3</div>
+        <div class="logo-3d">
+          <div class="logo-face">MP3</div>
+          <div class="logo-face">🎵</div>
+          <div class="logo-face">MP3</div>
+          <div class="logo-face">🎧</div>
+          <div class="logo-face">♫</div>
+          <div class="logo-face">🎶</div>
+        </div>
       </div>
       <h1>YouTube → MP3 Converter</h1>
-      <p class="subtitle">Convert any YouTube video to high-quality MP3 in seconds</p>
+      <p class="subtitle">Transform any YouTube video into premium quality audio instantly</p>
     </div>
 
     <div class="card">
       <form id="form">
-        <div class="form-group">
+        <div class="input-group">
           <div class="input-wrapper">
-            <input 
-              id="url" 
-              type="url" 
-              required 
-              placeholder="Paste YouTube URL here..."
-              autocomplete="off"
-            />
-            <button id="convertBtn" type="submit">
-              <span id="btnText">Convert</span>
+            <div class="input-field">
+              <input 
+                id="url" 
+                type="url" 
+                required 
+                placeholder="Paste your YouTube URL here..."
+                autocomplete="off"
+              />
+              <svg class="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+              </svg>
+            </div>
+            <button class="btn-convert" id="convertBtn" type="submit">
+              <span id="btnText">Convert Now</span>
             </button>
           </div>
         </div>
 
-        <div class="actions">
-          <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
-            <a href="#" id="sampleLink" class="link">Try sample video</a>
+        <div class="quick-actions">
+          <div class="action-group">
+            <a href="#" id="sampleLink" class="action-link">✨ Try Sample</a>
             <span class="health-badge loading" id="healthBadge">
               <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
-              Checking...
+              <span>Checking...</span>
             </span>
           </div>
-          <a href="chrome://extensions" class="link" target="_blank">Chrome Extension</a>
+          <a href="#" class="action-link">🚀 Browser Extension</a>
         </div>
 
-        <div class="progress-container" id="progressContainer">
+        <div class="progress-wrapper" id="progressWrapper">
           <div class="progress-bar">
             <div class="progress-fill"></div>
           </div>
         </div>
 
-        <div class="status">
-          <div class="status-dot" id="statusDot"></div>
-          <span class="status-text" id="statusText">Ready to convert</span>
+        <div class="status-display" id="statusDisplay">
+          <div class="status-indicator ready" id="statusIndicator"></div>
+          <span class="status-text" id="statusText">Ready to convert your audio</span>
         </div>
       </form>
 
-      <div class="features">
-        <div class="feature">🎵 192 kbps MP3</div>
-        <div class="feature">⚡ Lightning Fast</div>
-        <div class="feature">🔄 Smart Fallbacks</div>
-        <div class="feature">📱 Mobile Friendly</div>
+      <div class="features-grid">
+        <div class="feature-card" style="--i: 0;">
+          <div class="feature-icon">🎵</div>
+          <div class="feature-title">Premium Quality</div>
+          <div class="feature-desc">Crystal clear 192kbps MP3 audio extraction</div>
+        </div>
+        <div class="feature-card" style="--i: 1;">
+          <div class="feature-icon">⚡</div>
+          <div class="feature-title">Lightning Fast</div>
+          <div class="feature-desc">Optimized processing with smart caching</div>
+        </div>
+        <div class="feature-card" style="--i: 2;">
+          <div class="feature-icon">🔄</div>
+          <div class="feature-title">Smart Fallbacks</div>
+          <div class="feature-desc">Multiple extraction methods for reliability</div>
+        </div>
+        <div class="feature-card" style="--i: 3;">
+          <div class="feature-icon">📱</div>
+          <div class="feature-title">Universal Support</div>
+          <div class="feature-desc">Works perfectly on all devices</div>
+        </div>
       </div>
     </div>
 
     <div class="footer">
-      <p>Powered by yt-dlp • FFmpeg • Flask</p>
+      <p class="footer-text">Powered by advanced audio extraction technology</p>
+      <div class="footer-links">
+        <a href="#" class="footer-link">Privacy Policy</a>
+        <a href="#" class="footer-link">Terms of Service</a>
+        <a href="#" class="footer-link">API Access</a>
+        <a href="#" class="footer-link">Support</a>
+      </div>
     </div>
   </div>
 
+  <!-- Toast Notification -->
   <div class="toast" id="toast"></div>
 
   <script>
+    // Selectors
     const $ = (sel) => document.querySelector(sel);
-    const statusDot = $('#statusDot');
+    const $$ = (sel) => document.querySelectorAll(sel);
+    
+    // Elements
+    const statusIndicator = $('#statusIndicator');
     const statusText = $('#statusText');
-    const progressContainer = $('#progressContainer');
+    const statusDisplay = $('#statusDisplay');
+    const progressWrapper = $('#progressWrapper');
     const toast = $('#toast');
     const form = $('#form');
     const urlInput = $('#url');
@@ -830,52 +1265,96 @@ HOME_HTML = """
     const healthBadge = $('#healthBadge');
     const sampleLink = $('#sampleLink');
 
-    function setStatus(type, message, showSpinner = false) {
-      statusText.textContent = message;
-      statusDot.className = 'status-dot';
-      statusDot.classList.remove('active');
+    // Generate random stars
+    function createStars() {
+      const starsContainer = $('#stars');
+      const numberOfStars = 100;
       
-      if (type === 'ok') statusDot.classList.add('ok');
-      else if (type === 'warn') { statusDot.classList.add('warn'); statusDot.classList.add('active'); }
-      else if (type === 'err') statusDot.classList.add('err');
-      
-      if (showSpinner) {
-        statusText.innerHTML = '<div class="spinner" style="display: inline-block; vertical-align: middle; margin-right: 8px;"></div>' + message;
+      for (let i = 0; i < numberOfStars; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 100 + '%';
+        star.style.animationDelay = Math.random() * 3 + 's';
+        star.style.animationDuration = 3 + Math.random() * 2 + 's';
+        starsContainer.appendChild(star);
       }
     }
 
+    // Generate floating particles
+    function createParticles() {
+      const particlesContainer = $('#particles');
+      const numberOfParticles = 30;
+      
+      for (let i = 0; i < numberOfParticles; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        particle.style.left = Math.random() * 100 + '%';
+        particle.style.animationDelay = Math.random() * 20 + 's';
+        particle.style.animationDuration = 20 + Math.random() * 10 + 's';
+        particlesContainer.appendChild(particle);
+      }
+    }
+
+    // Initialize background effects
+    createStars();
+    createParticles();
+
+    // Status management
+    function setStatus(type, message, showSpinner = false) {
+      statusText.textContent = message;
+      statusIndicator.className = 'status-indicator ' + type;
+      statusDisplay.classList.toggle('active', type === 'processing');
+      
+      if (showSpinner) {
+        const loadingHtml = '<div class="loading-dots"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>';
+        statusText.innerHTML = loadingHtml + ' ' + message;
+      }
+    }
+
+    // Toast notifications
     function showToast(message) {
       toast.textContent = message;
       toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
+      setTimeout(() => toast.classList.remove('show'), 4000);
     }
 
+    // URL validation
     function isValidYouTubeURL(url) {
       return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(url);
     }
 
+    // Health check
     fetch('/health')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data && data.ok) {
           healthBadge.className = 'health-badge';
-          healthBadge.innerHTML = '<div style="width: 8px; height: 8px; background: var(--ok); border-radius: 50%;"></div>Server Online';
+          healthBadge.innerHTML = '<div class="health-dot"></div><span>Online</span>';
         } else {
           throw new Error();
         }
       })
       .catch(() => {
         healthBadge.className = 'health-badge error';
-        healthBadge.textContent = 'Server Offline';
+        healthBadge.innerHTML = '<span>Offline</span>';
       });
 
+    // Sample video
     sampleLink.addEventListener('click', (e) => {
       e.preventDefault();
       urlInput.value = 'http://www.youtube.com/watch?v=JK_hBk2f01k';
-      showToast('✨ Sample video loaded');
+      showToast('✨ Sample video loaded - Click Convert Now!');
       urlInput.focus();
+      
+      // Add visual feedback
+      urlInput.style.animation = 'pulse 0.5s';
+      setTimeout(() => {
+        urlInput.style.animation = '';
+      }, 500);
     });
 
+    // Queue system
     async function tryEnqueue(url) {
       try {
         const resp = await fetch('/enqueue', {
@@ -891,8 +1370,9 @@ HOME_HTML = """
       }
     }
 
+    // Job polling
     async function pollJob(jobId) {
-      progressContainer.classList.add('show');
+      progressWrapper.classList.add('active');
       const startTime = Date.now();
       
       const interval = setInterval(async () => {
@@ -900,10 +1380,10 @@ HOME_HTML = """
           const resp = await fetch('/status/' + jobId);
           if (!resp.ok) {
             clearInterval(interval);
-            setStatus('err', 'Status check failed');
-            progressContainer.classList.remove('show');
+            setStatus('error', 'Status check failed');
+            progressWrapper.classList.remove('active');
             convertBtn.disabled = false;
-            btnText.textContent = 'Convert';
+            btnText.textContent = 'Convert Now';
             return;
           }
           
@@ -912,87 +1392,102 @@ HOME_HTML = """
           
           if (status.status === 'done') {
             clearInterval(interval);
-            progressContainer.classList.remove('show');
-            setStatus('ok', '✓ Ready! Starting download...');
+            progressWrapper.classList.remove('active');
+            setStatus('success', '✓ Conversion complete! Downloading...');
             convertBtn.disabled = false;
-            btnText.textContent = 'Convert';
-            showToast('🎉 Conversion complete!');
+            btnText.textContent = 'Convert Now';
+            showToast('🎉 Your MP3 is ready!');
             
-            // Use direct location instead of window.open to avoid popup blocker
             window.location.href = '/download_job/' + jobId;
           } else if (status.status === 'error') {
             clearInterval(interval);
-            progressContainer.classList.remove('show');
-            setStatus('err', status.error || 'Conversion failed');
+            progressWrapper.classList.remove('active');
+            setStatus('error', status.error || 'Conversion failed');
             convertBtn.disabled = false;
-            btnText.textContent = 'Convert';
+            btnText.textContent = 'Convert Now';
+            showToast('❌ Conversion failed. Please try again.');
           } else {
             const minutes = Math.floor(elapsed / 60);
             const seconds = elapsed % 60;
             const timeStr = minutes > 0 ? minutes + 'm ' + seconds + 's' : seconds + 's';
-            setStatus('warn', 'Converting... ' + timeStr, true);
+            setStatus('processing', 'Converting... ' + timeStr, true);
           }
         } catch (e) {
           clearInterval(interval);
-          progressContainer.classList.remove('show');
-          setStatus('err', 'Connection error');
+          progressWrapper.classList.remove('active');
+          setStatus('error', 'Connection error');
           convertBtn.disabled = false;
-          btnText.textContent = 'Convert';
+          btnText.textContent = 'Convert Now';
         }
       }, 2000);
     }
 
+    // Form submission
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       
       const url = urlInput.value.trim();
       if (!url) {
-        setStatus('warn', 'Please paste a YouTube URL');
+        setStatus('error', 'Please paste a YouTube URL');
+        showToast('⚠️ URL field is empty');
         urlInput.focus();
         return;
       }
       
       if (!isValidYouTubeURL(url)) {
-        setStatus('warn', 'Invalid YouTube URL');
+        setStatus('error', 'Invalid YouTube URL');
         showToast('❌ Please enter a valid YouTube link');
         return;
       }
 
       convertBtn.disabled = true;
       btnText.textContent = 'Processing...';
-      setStatus('warn', 'Starting conversion...', true);
+      setStatus('processing', 'Initializing conversion...', true);
 
-      // Try queue system first (for long videos)
       const jobId = await tryEnqueue(url);
       
       if (jobId) {
-        showToast('✓ Conversion queued - this may take a few minutes');
+        showToast('✓ Processing started - Please wait...');
         await pollJob(jobId);
       } else {
-        // Fallback to direct download (for short videos)
-        setStatus('warn', 'Converting directly...', true);
-        progressContainer.classList.add('show');
+        setStatus('processing', 'Direct conversion...', true);
+        progressWrapper.classList.add('active');
         
         const downloadUrl = '/download?url=' + encodeURIComponent(url);
         window.open(downloadUrl, '_blank');
         
         setTimeout(() => {
-          progressContainer.classList.remove('show');
-          setStatus('ok', 'Download started in new tab');
+          progressWrapper.classList.remove('active');
+          setStatus('success', 'Download started in new tab');
           convertBtn.disabled = false;
-          btnText.textContent = 'Convert';
+          btnText.textContent = 'Convert Now';
+          showToast('✓ Download initiated');
         }, 3000);
       }
     });
 
+    // URL parameter handling
     try {
       const params = new URLSearchParams(location.search);
       const urlParam = params.get('url');
       if (urlParam) {
         urlInput.value = urlParam;
-        setStatus('ok', 'URL loaded from link');
+        setStatus('ready', 'URL loaded - Click Convert Now');
+        showToast('✨ URL loaded from link');
       }
     } catch (e) {}
+
+    // Add subtle parallax effect on mouse move
+    document.addEventListener('mousemove', (e) => {
+      const x = e.clientX / window.innerWidth;
+      const y = e.clientY / window.innerHeight;
+      
+      const orbs = $$('.orb');
+      orbs.forEach((orb, index) => {
+        const speed = (index + 1) * 10;
+        orb.style.transform = `translate(${x * speed}px, ${y * speed}px)`;
+      });
+    });
   </script>
 </body>
 </html>
