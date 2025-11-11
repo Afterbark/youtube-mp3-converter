@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.request
 import threading
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone  # FIXED: Added timezone
 from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
 import yt_dlp
@@ -64,6 +64,26 @@ def safe_filename(name: str, ext: str = "mp3") -> str:
 
 def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str, quality: str = "192", format_type: str = "mp3"):
     """Build optimized yt-dlp options for a specific player client, quality, and format."""
+    
+    # FIXED: Construct extractor args dynamically to include PO Token
+    youtube_extractor_args = {
+        "player_client": [client],
+        "player_skip": ["configs", "webpage"],
+    }
+
+    # Inject PO Token if provided to fix "GVS PO Token" warning
+    if dsid:
+        # yt-dlp expects the token format to include the origin (e.g., "web+TOKEN" or "android.gvs+TOKEN")
+        # We infer the prefix based on the client being used
+        if client == "android":
+            token_str = f"android.gvs+{dsid}" if not dsid.startswith("android.gvs") else dsid
+        elif client == "ios":
+            token_str = f"ios+{dsid}" if not dsid.startswith("ios") else dsid
+        else:
+            token_str = f"web+{dsid}" if not dsid.startswith("web") else dsid
+            
+        youtube_extractor_args["po_token"] = [token_str]
+
     opts = {
         "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
         "outtmpl": {"default": out_default},
@@ -81,10 +101,7 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         "age_limit": None,
         "nocheckcertificate": True,
         "extractor_args": {
-            "youtube": {
-                "player_client": [client],
-                "player_skip": ["configs", "webpage"],
-            }
+            "youtube": youtube_extractor_args
         },
         "http_headers": {
             "User-Agent": "com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip" if client == "android"
@@ -1229,7 +1246,6 @@ HOME_HTML = """
   </style>
 </head>
 <body>
-  <!-- Animated Background Layers -->
   <div class="universe-bg"></div>
   <div class="grid-bg"></div>
   <div class="gradient-orbs">
@@ -1238,13 +1254,10 @@ HOME_HTML = """
     <div class="orb orb3"></div>
   </div>
   
-  <!-- Stars Background -->
   <div class="stars" id="stars"></div>
   
-  <!-- Floating Particles -->
   <div class="particles" id="particles"></div>
 
-  <!-- Main Content -->
   <div class="container">
     <div class="header">
       <div class="logo-container">
@@ -1354,7 +1367,6 @@ HOME_HTML = """
     </div>
   </div>
 
-  <!-- Toast Notification -->
   <div class="toast" id="toast"></div>
 
   <script>
@@ -1644,7 +1656,8 @@ def health():
     """Health check endpoint."""
     return jsonify({
         "ok": True,
-        "timestamp": datetime.utcnow().isoformat(),
+        # FIXED: Use timezone-aware datetime
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "active_jobs": len([j for j in job_queue.values() if j["status"] == "processing"])
     })
 
@@ -1722,7 +1735,8 @@ def enqueue():
         "title": None,
         "error": None,
         "file_path": None,
-        "created_at": datetime.utcnow().isoformat()
+        # FIXED: Use timezone-aware datetime
+        "created_at": datetime.now(timezone.utc).isoformat()
     }
     
     thread = threading.Thread(target=process_job, args=(job_id, url, quality, format_type), daemon=True)
