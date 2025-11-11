@@ -62,8 +62,8 @@ def safe_filename(name: str, ext: str = "mp3") -> str:
     return f"{name}.{ext}"
 
 
-def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str):
-    """Build optimized yt-dlp options for a specific player client."""
+def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str, quality: str = "192"):
+    """Build optimized yt-dlp options for a specific player client and quality."""
     opts = {
         "format": "bestaudio/best",
         "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
@@ -84,7 +84,7 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
-            "preferredquality": "192",
+            "preferredquality": quality,
         }],
         "extractor_args": {
             "youtube": {
@@ -132,7 +132,7 @@ def fetch_title_with_ytdlp(url: str, cookiefile: str | None, dsid: str | None):
     """Metadata-only title fetch using the same cookies/clients."""
     for client in CLIENTS_TO_TRY:
         try:
-            opts = _base_ydl_opts(OUT_DEFAULT, cookiefile, dsid, client)
+            opts = _base_ydl_opts(OUT_DEFAULT, cookiefile, dsid, client, "192")  # Use default quality for metadata
             opts.update({"skip_download": True})
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -157,13 +157,13 @@ def fetch_title_oembed(url: str):
     return None
 
 
-def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None):
+def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None, quality: str = "192"):
     """Try multiple clients to avoid SABR/bot checks. Returns (title, mp3_path:str)."""
     last_err = None
     for idx, client in enumerate(CLIENTS_TO_TRY):
         try:
-            print(f"[yt-dlp] Attempt {idx+1}/{len(CLIENTS_TO_TRY)}: client={client}", flush=True)
-            with yt_dlp.YoutubeDL(_base_ydl_opts(out_default, cookiefile, dsid, client)) as ydl:
+            print(f"[yt-dlp] Attempt {idx+1}/{len(CLIENTS_TO_TRY)}: client={client}, quality={quality}kbps", flush=True)
+            with yt_dlp.YoutubeDL(_base_ydl_opts(out_default, cookiefile, dsid, client, quality)) as ydl:
                 info = ydl.extract_info(url, download=True)
                 title = info.get("title") or "audio"
                 mp3_path = _resolve_mp3_path(ydl, info)
@@ -178,7 +178,7 @@ def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | N
     raise RuntimeError("All extractor attempts failed")
 
 
-def process_job(job_id: str, url: str):
+def process_job(job_id: str, url: str, quality: str = "192"):
     """Background job processor."""
     try:
         job_queue[job_id]["status"] = "processing"
@@ -186,7 +186,7 @@ def process_job(job_id: str, url: str):
         
         # Download with fallback
         title, mp3_path = download_audio_with_fallback(
-            url, OUT_DEFAULT, cookiefile=cookiefile, dsid=YTDLP_DATA_SYNC_ID
+            url, OUT_DEFAULT, cookiefile=cookiefile, dsid=YTDLP_DATA_SYNC_ID, quality=quality
         )
         
         # Try to get better title if needed
@@ -701,6 +701,37 @@ HOME_HTML = """
         0 0 0 4px rgba(99, 102, 241, 0.1),
         var(--glow-primary);
       transform: translateY(-1px);
+    }
+    
+    /* Quality Selector */
+    .quality-selector {
+      padding: 20px 16px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px solid var(--border);
+      border-radius: 20px;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 600;
+      outline: none;
+      transition: var(--transition);
+      cursor: pointer;
+      min-width: 120px;
+    }
+    
+    .quality-selector:hover {
+      border-color: var(--primary-light);
+      background: rgba(0, 0, 0, 0.5);
+    }
+    
+    .quality-selector:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+    
+    .quality-selector option {
+      background: var(--bg-dark);
+      color: var(--text);
+      padding: 10px;
     }
     
     /* Input Icon */
@@ -1236,6 +1267,12 @@ HOME_HTML = """
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
               </svg>
             </div>
+            <select class="quality-selector" id="qualitySelect">
+              <option value="128">128 kbps</option>
+              <option value="192" selected>192 kbps</option>
+              <option value="256">256 kbps</option>
+              <option value="320">320 kbps</option>
+            </select>
             <button class="btn-convert" id="convertBtn" type="submit">
               <span id="btnText">Convert Now</span>
             </button>
@@ -1411,12 +1448,12 @@ HOME_HTML = """
     });
 
     // Queue system
-    async function tryEnqueue(url) {
+    async function tryEnqueue(url, quality = '192') {
       try {
         const resp = await fetch('/enqueue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ url })
+          body: new URLSearchParams({ url, quality })
         });
         if (!resp.ok) return null;
         const data = await resp.json();
@@ -1483,6 +1520,8 @@ HOME_HTML = """
       e.preventDefault();
       
       const url = urlInput.value.trim();
+      const quality = $('#qualitySelect').value;
+      
       if (!url) {
         setStatus('error', 'Please paste a YouTube URL');
         showToast('⚠️ URL field is empty');
@@ -1498,18 +1537,18 @@ HOME_HTML = """
 
       convertBtn.disabled = true;
       btnText.textContent = 'Processing...';
-      setStatus('processing', 'Initializing conversion...', true);
+      setStatus('processing', `Initializing conversion (${quality}kbps)...`, true);
 
-      const jobId = await tryEnqueue(url);
+      const jobId = await tryEnqueue(url, quality);
       
       if (jobId) {
-        showToast('✓ Processing started - Please wait...');
+        showToast(`✓ Processing at ${quality}kbps - Please wait...`);
         await pollJob(jobId);
       } else {
-        setStatus('processing', 'Direct conversion...', true);
+        setStatus('processing', `Direct conversion at ${quality}kbps...`, true);
         progressWrapper.classList.add('active');
         
-        const downloadUrl = '/download?url=' + encodeURIComponent(url);
+        const downloadUrl = '/download?url=' + encodeURIComponent(url) + '&quality=' + quality;
         window.open(downloadUrl, '_blank');
         
         setTimeout(() => {
@@ -1571,22 +1610,37 @@ def health():
 def download_extension():
     """Download the Chrome extension ZIP file."""
     import os
+    import io
     
-    # Look for the extension ZIP file
+    # Try to find the extension ZIP file
     extension_paths = [
         "/home/claude/youtube-mp3-extension.zip",
         "./youtube-mp3-extension.zip",
-        "/tmp/youtube-mp3-extension.zip"
+        "/tmp/youtube-mp3-extension.zip",
+        "youtube-mp3-extension.zip"
     ]
     
     for path in extension_paths:
         if os.path.exists(path):
-            return send_file(
-                path,
-                mimetype="application/zip",
-                as_attachment=True,
-                download_name="youtube-mp3-chrome-extension.zip"
-            )
+            try:
+                # Read the file into memory
+                with open(path, 'rb') as f:
+                    zip_data = f.read()
+                
+                # Create response with proper headers
+                response = send_file(
+                    io.BytesIO(zip_data),
+                    mimetype="application/zip",
+                    as_attachment=True,
+                    download_name="youtube-mp3-chrome-extension.zip"
+                )
+                # Force download headers
+                response.headers["Content-Type"] = "application/zip"
+                response.headers["Content-Disposition"] = 'attachment; filename="youtube-mp3-chrome-extension.zip"'
+                return response
+            except Exception as e:
+                print(f"Error serving extension: {e}")
+                continue
     
     # If no zip file found, return error
     return jsonify({"error": "Extension file not found"}), 404
@@ -1596,24 +1650,32 @@ def download_extension():
 def enqueue():
     """Add conversion job to queue for async processing."""
     url = request.form.get("url")
+    quality = request.form.get("quality", "192")  # Default to 192 kbps
+    
     if not url:
         return jsonify({"error": "missing url"}), 400
+    
+    # Validate quality
+    valid_qualities = ["128", "192", "256", "320"]
+    if quality not in valid_qualities:
+        quality = "192"
     
     job_id = str(uuid.uuid4())
     job_queue[job_id] = {
         "status": "queued",
         "url": url,
+        "quality": quality,
         "title": None,
         "error": None,
         "mp3_path": None,
         "created_at": datetime.utcnow().isoformat()
     }
     
-    thread = threading.Thread(target=process_job, args=(job_id, url), daemon=True)
+    thread = threading.Thread(target=process_job, args=(job_id, url, quality), daemon=True)
     thread.start()
     
-    print(f"✓ Job {job_id} queued for URL: {url[:50]}...", flush=True)
-    return jsonify({"job_id": job_id, "status": "queued"})
+    print(f"✓ Job {job_id} queued for URL: {url[:50]}... at {quality}kbps", flush=True)
+    return jsonify({"job_id": job_id, "status": "queued", "quality": quality})
 
 
 @app.get("/status/<job_id>")
@@ -1663,8 +1725,15 @@ def download_job(job_id: str):
 def download():
     """Direct download endpoint (synchronous)."""
     url = request.args.get("url") or request.form.get("url")
+    quality = request.args.get("quality") or request.form.get("quality", "192")
+    
     if not url:
         return jsonify({"error": "missing url"}), 400
+    
+    # Validate quality
+    valid_qualities = ["128", "192", "256", "320"]
+    if quality not in valid_qualities:
+        quality = "192"
 
     try:
         cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
@@ -1673,7 +1742,8 @@ def download():
             url,
             OUT_DEFAULT,
             cookiefile=cookiefile,
-            dsid=YTDLP_DATA_SYNC_ID
+            dsid=YTDLP_DATA_SYNC_ID,
+            quality=quality
         )
 
         if not title or title.strip().lower() == "audio":
