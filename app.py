@@ -1,4 +1,4 @@
-import os
+mport os
 import base64
 import re
 import time
@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.request
 import threading
 from pathlib import Path
-from datetime import datetime, timezone  # FIXED: Added timezone
+from datetime import datetime
 from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
 import yt_dlp
@@ -47,13 +47,13 @@ CLIENTS_TO_TRY = [
 ]
 
 # ---------- Job Queue System ----------
-job_queue = {}  # {job_id: {status, url, title, error, file_path, format, created_at}}
+job_queue = {}  # {job_id: {status, url, title, error, mp3_path, created_at}}
 
 def safe_filename(name: str, ext: str = "mp3") -> str:
     """Sanitize filename for safe download - preserves Unicode characters."""
     # Only remove characters that are invalid in filenames
     # Keep Arabic, Chinese, Japanese, Korean, etc.
-    name = SAFE_CHARS.sub("_", name).strip() or "media"
+    name = SAFE_CHARS.sub("_", name).strip() or "audio"
     # Remove multiple spaces and leading/trailing spaces
     name = " ".join(name.split())
     # Limit length to 200 chars to be safe
@@ -62,29 +62,10 @@ def safe_filename(name: str, ext: str = "mp3") -> str:
     return f"{name}.{ext}"
 
 
-def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str, quality: str = "192", format_type: str = "mp3"):
-    """Build optimized yt-dlp options for a specific player client, quality, and format."""
-    
-    # FIXED: Construct extractor args dynamically to include PO Token
-    youtube_extractor_args = {
-        "player_client": [client],
-        "player_skip": ["configs", "webpage"],
-    }
-
-    # Inject PO Token if provided to fix "GVS PO Token" warning
-    if dsid:
-        # yt-dlp expects the token format to include the origin (e.g., "web+TOKEN" or "android.gvs+TOKEN")
-        # We infer the prefix based on the client being used
-        if client == "android":
-            token_str = f"android.gvs+{dsid}" if not dsid.startswith("android.gvs") else dsid
-        elif client == "ios":
-            token_str = f"ios+{dsid}" if not dsid.startswith("ios") else dsid
-        else:
-            token_str = f"web+{dsid}" if not dsid.startswith("web") else dsid
-            
-        youtube_extractor_args["po_token"] = [token_str]
-
+def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str, quality: str = "192"):
+    """Build optimized yt-dlp options for a specific player client and quality."""
     opts = {
+        "format": "bestaudio/best",
         "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
         "outtmpl": {"default": out_default},
         "noprogress": True,
@@ -100,8 +81,16 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         "http_chunk_size": 10485760,
         "age_limit": None,
         "nocheckcertificate": True,
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": quality,
+        }],
         "extractor_args": {
-            "youtube": youtube_extractor_args
+            "youtube": {
+                "player_client": [client],
+                "player_skip": ["configs", "webpage"],
+            }
         },
         "http_headers": {
             "User-Agent": "com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip" if client == "android"
@@ -112,36 +101,17 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         },
     }
     
-    # Configure format and postprocessors based on desired output
-    if format_type == "mp3":
-        opts["format"] = "bestaudio/best"
-        opts["postprocessors"] = [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": quality,
-        }]
-    else:  # mp4
-        # Quality mapping for video
-        quality_map = {
-            "360": "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best[height<=360]",
-            "480": "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best[height<=480]",
-            "720": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]",
-            "1080": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]",
-        }
-        opts["format"] = quality_map.get(quality, "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
-        opts["merge_output_format"] = "mp4"
-    
     if cookiefile:
         opts["cookiefile"] = cookiefile
     
     return opts
 
 
-def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info, ext: str = "mp3") -> Path:
-    """Get the final file path after post-processing."""
+def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info) -> Path:
+    """Get the final MP3 path after post-processing."""
     try:
         pre = Path(ydl.prepare_filename(info))
-        cand = pre.with_suffix(f".{ext}")
+        cand = pre.with_suffix(".mp3")
         if cand.exists():
             return cand
     except Exception:
@@ -149,13 +119,13 @@ def _resolve_mp3_path(ydl: yt_dlp.YoutubeDL, info, ext: str = "mp3") -> Path:
 
     vid = info.get("id") or "*"
     matches = sorted(
-        DOWNLOAD_DIR.glob(f"yt_{vid}*.{ext}"),
+        DOWNLOAD_DIR.glob(f"yt_{vid}*.mp3"),
         key=lambda p: p.stat().st_mtime,
         reverse=True
     )
     if matches:
         return matches[0]
-    raise FileNotFoundError(f"{ext.upper()} not found after postprocessing")
+    raise FileNotFoundError("MP3 not found after postprocessing")
 
 
 def fetch_title_with_ytdlp(url: str, cookiefile: str | None, dsid: str | None):
@@ -187,18 +157,18 @@ def fetch_title_oembed(url: str):
     return None
 
 
-def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None, quality: str = "192", format_type: str = "mp3"):
-    """Try multiple clients to avoid SABR/bot checks. Returns (title, file_path:str)."""
+def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | None, dsid: str | None, quality: str = "192"):
+    """Try multiple clients to avoid SABR/bot checks. Returns (title, mp3_path:str)."""
     last_err = None
     for idx, client in enumerate(CLIENTS_TO_TRY):
         try:
-            print(f"[yt-dlp] Attempt {idx+1}/{len(CLIENTS_TO_TRY)}: client={client}, format={format_type}, quality={quality}", flush=True)
-            with yt_dlp.YoutubeDL(_base_ydl_opts(out_default, cookiefile, dsid, client, quality, format_type)) as ydl:
+            print(f"[yt-dlp] Attempt {idx+1}/{len(CLIENTS_TO_TRY)}: client={client}, quality={quality}kbps", flush=True)
+            with yt_dlp.YoutubeDL(_base_ydl_opts(out_default, cookiefile, dsid, client, quality)) as ydl:
                 info = ydl.extract_info(url, download=True)
-                title = info.get("title") or "media"
-                file_path = _resolve_mp3_path(ydl, info, format_type)
+                title = info.get("title") or "audio"
+                mp3_path = _resolve_mp3_path(ydl, info)
                 print(f"✓ Success with client={client}", flush=True)
-                return title, str(file_path)
+                return title, str(mp3_path)
         except (DownloadError, ExtractorError, FileNotFoundError) as e:
             last_err = e
             print(f"✗ client={client} failed: {str(e)[:100]}", flush=True)
@@ -208,32 +178,32 @@ def download_audio_with_fallback(url: str, out_default: str, cookiefile: str | N
     raise RuntimeError("All extractor attempts failed")
 
 
-def process_job(job_id: str, url: str, quality: str = "192", format_type: str = "mp3"):
+def process_job(job_id: str, url: str, quality: str = "192"):
     """Background job processor."""
     try:
         job_queue[job_id]["status"] = "processing"
         cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
         
         # Download with fallback
-        title, file_path = download_audio_with_fallback(
-            url, OUT_DEFAULT, cookiefile=cookiefile, dsid=YTDLP_DATA_SYNC_ID, quality=quality, format_type=format_type
+        title, mp3_path = download_audio_with_fallback(
+            url, OUT_DEFAULT, cookiefile=cookiefile, dsid=YTDLP_DATA_SYNC_ID, quality=quality
         )
         
         # Try to get better title if needed
-        if not title or title.strip().lower() in ["audio", "media"]:
+        if not title or title.strip().lower() == "audio":
             t2 = fetch_title_with_ytdlp(url, cookiefile, YTDLP_DATA_SYNC_ID)
             if t2:
                 title = t2
         
-        if not title or title.strip().lower() in ["audio", "media"]:
+        if not title or title.strip().lower() == "audio":
             t3 = fetch_title_oembed(url)
             if t3:
                 title = t3
         
         job_queue[job_id].update({
             "status": "done",
-            "title": title or "media",
-            "file_path": file_path,
+            "title": title or "audio",
+            "mp3_path": mp3_path,
         })
         print(f"✓ Job {job_id} completed: {title}", flush=True)
         
@@ -241,7 +211,7 @@ def process_job(job_id: str, url: str, quality: str = "192", format_type: str = 
         def cleanup():
             time.sleep(300)
             try:
-                Path(file_path).unlink(missing_ok=True)
+                Path(mp3_path).unlink(missing_ok=True)
                 if job_id in job_queue:
                     del job_queue[job_id]
                 print(f"🧹 Cleaned up job {job_id}", flush=True)
@@ -264,7 +234,7 @@ HOME_HTML = """
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>YouTube → MP3/MP4 | Premium Converter</title>
+  <title>YouTube → MP3 | Premium Audio Converter</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1246,6 +1216,7 @@ HOME_HTML = """
   </style>
 </head>
 <body>
+  <!-- Animated Background Layers -->
   <div class="universe-bg"></div>
   <div class="grid-bg"></div>
   <div class="gradient-orbs">
@@ -1254,10 +1225,13 @@ HOME_HTML = """
     <div class="orb orb3"></div>
   </div>
   
+  <!-- Stars Background -->
   <div class="stars" id="stars"></div>
   
+  <!-- Floating Particles -->
   <div class="particles" id="particles"></div>
 
+  <!-- Main Content -->
   <div class="container">
     <div class="header">
       <div class="logo-container">
@@ -1273,8 +1247,8 @@ HOME_HTML = """
           </div>
         </div>
       </div>
-      <h1>YouTube → MP3/MP4</h1>
-      <p class="subtitle">Convert videos to high-quality audio or download as video</p>
+      <h1>YouTube → MP3 Converter</h1>
+      <p class="subtitle">Transform any YouTube video into premium quality audio instantly</p>
     </div>
 
     <div class="card">
@@ -1293,10 +1267,6 @@ HOME_HTML = """
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
               </svg>
             </div>
-            <select class="quality-selector" id="formatSelect">
-              <option value="mp3" selected>MP3 Audio</option>
-              <option value="mp4">MP4 Video</option>
-            </select>
             <select class="quality-selector" id="qualitySelect">
               <option value="128">128 kbps</option>
               <option value="192" selected>192 kbps</option>
@@ -1336,7 +1306,7 @@ HOME_HTML = """
         <div class="feature-card" style="--i: 0;">
           <div class="feature-icon">🎵</div>
           <div class="feature-title">Premium Quality</div>
-          <div class="feature-desc">MP3 audio or MP4 video in multiple qualities</div>
+          <div class="feature-desc">Crystal clear 192kbps MP3 audio extraction</div>
         </div>
         <div class="feature-card" style="--i: 1;">
           <div class="feature-icon">⚡</div>
@@ -1367,6 +1337,7 @@ HOME_HTML = """
     </div>
   </div>
 
+  <!-- Toast Notification -->
   <div class="toast" id="toast"></div>
 
   <script>
@@ -1386,8 +1357,6 @@ HOME_HTML = """
     const btnText = $('#btnText');
     const healthBadge = $('#healthBadge');
     const sampleLink = $('#sampleLink');
-    const formatSelect = $('#formatSelect');
-    const qualitySelect = $('#qualitySelect');
 
     // Generate random stars
     function createStars() {
@@ -1478,34 +1447,13 @@ HOME_HTML = """
       }, 500);
     });
 
-
-    // Format change handler - update quality options
-    formatSelect.addEventListener('change', () => {
-      const format = formatSelect.value;
-      if (format === 'mp3') {
-        qualitySelect.innerHTML = `
-          <option value="128">128 kbps</option>
-          <option value="192" selected>192 kbps</option>
-          <option value="256">256 kbps</option>
-          <option value="320">320 kbps</option>
-        `;
-      } else {
-        qualitySelect.innerHTML = `
-          <option value="360">360p</option>
-          <option value="480">480p</option>
-          <option value="720" selected>720p</option>
-          <option value="1080">1080p</option>
-        `;
-      }
-    });
-
     // Queue system
-    async function tryEnqueue(url, quality = '192', format = 'mp3') {
+    async function tryEnqueue(url, quality = '192') {
       try {
         const resp = await fetch('/enqueue', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ url, quality, format })
+          body: new URLSearchParams({ url, quality })
         });
         if (!resp.ok) return null;
         const data = await resp.json();
@@ -1541,8 +1489,7 @@ HOME_HTML = """
             setStatus('success', '✓ Conversion complete! Downloading...');
             convertBtn.disabled = false;
             btnText.textContent = 'Convert Now';
-            const fileType = format.toUpperCase();
-            showToast(`🎉 Your ${fileType} is ready!`);
+            showToast('🎉 Your MP3 is ready!');
             
             window.location.href = '/download_job/' + jobId;
           } else if (status.status === 'error') {
@@ -1573,8 +1520,7 @@ HOME_HTML = """
       e.preventDefault();
       
       const url = urlInput.value.trim();
-      const format = formatSelect.value;
-      const quality = qualitySelect.value;
+      const quality = $('#qualitySelect').value;
       
       if (!url) {
         setStatus('error', 'Please paste a YouTube URL');
@@ -1591,19 +1537,18 @@ HOME_HTML = """
 
       convertBtn.disabled = true;
       btnText.textContent = 'Processing...';
-      const qualityText = format === 'mp3' ? `${quality}kbps` : `${quality}p`;
-      setStatus('processing', `Initializing conversion (${format.toUpperCase()} ${qualityText})...`, true);
+      setStatus('processing', `Initializing conversion (${quality}kbps)...`, true);
 
-      const jobId = await tryEnqueue(url, quality, format);
+      const jobId = await tryEnqueue(url, quality);
       
       if (jobId) {
-        showToast(`✓ Processing ${format.toUpperCase()} at ${qualityText} - Please wait...`);
+        showToast(`✓ Processing at ${quality}kbps - Please wait...`);
         await pollJob(jobId);
       } else {
-        setStatus('processing', `Direct conversion (${format.toUpperCase()} ${qualityText})...`, true);
+        setStatus('processing', `Direct conversion at ${quality}kbps...`, true);
         progressWrapper.classList.add('active');
         
-        const downloadUrl = '/download?url=' + encodeURIComponent(url) + '&quality=' + quality + '&format=' + format;
+        const downloadUrl = '/download?url=' + encodeURIComponent(url) + '&quality=' + quality;
         window.open(downloadUrl, '_blank');
         
         setTimeout(() => {
@@ -1656,8 +1601,7 @@ def health():
     """Health check endpoint."""
     return jsonify({
         "ok": True,
-        # FIXED: Use timezone-aware datetime
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.utcnow().isoformat(),
         "active_jobs": len([j for j in job_queue.values() if j["status"] == "processing"])
     })
 
@@ -1706,44 +1650,32 @@ def download_extension():
 def enqueue():
     """Add conversion job to queue for async processing."""
     url = request.form.get("url")
-    quality = request.form.get("quality", "192")
-    format_type = request.form.get("format", "mp3")  # Default to mp3
+    quality = request.form.get("quality", "192")  # Default to 192 kbps
     
     if not url:
         return jsonify({"error": "missing url"}), 400
     
-    # Validate format
-    if format_type not in ["mp3", "mp4"]:
-        format_type = "mp3"
-    
-    # Validate quality based on format
-    if format_type == "mp3":
-        valid_qualities = ["128", "192", "256", "320"]
-        if quality not in valid_qualities:
-            quality = "192"
-    else:  # mp4
-        valid_qualities = ["360", "480", "720", "1080"]
-        if quality not in valid_qualities:
-            quality = "720"
+    # Validate quality
+    valid_qualities = ["128", "192", "256", "320"]
+    if quality not in valid_qualities:
+        quality = "192"
     
     job_id = str(uuid.uuid4())
     job_queue[job_id] = {
         "status": "queued",
         "url": url,
         "quality": quality,
-        "format": format_type,
         "title": None,
         "error": None,
-        "file_path": None,
-        # FIXED: Use timezone-aware datetime
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "mp3_path": None,
+        "created_at": datetime.utcnow().isoformat()
     }
     
-    thread = threading.Thread(target=process_job, args=(job_id, url, quality, format_type), daemon=True)
+    thread = threading.Thread(target=process_job, args=(job_id, url, quality), daemon=True)
     thread.start()
     
-    print(f"✓ Job {job_id} queued for URL: {url[:50]}... ({format_type} @ {quality})", flush=True)
-    return jsonify({"job_id": job_id, "status": "queued", "quality": quality, "format": format_type})
+    print(f"✓ Job {job_id} queued for URL: {url[:50]}... at {quality}kbps", flush=True)
+    return jsonify({"job_id": job_id, "status": "queued", "quality": quality})
 
 
 @app.get("/status/<job_id>")
@@ -1757,7 +1689,6 @@ def status(job_id: str):
         "status": job["status"],
         "title": job.get("title"),
         "error": job.get("error"),
-        "format": job.get("format"),
         "created_at": job.get("created_at")
     })
 
@@ -1773,19 +1704,15 @@ def download_job(job_id: str):
     if job["status"] != "done":
         return jsonify({"error": f"job is {job['status']}"}), 400
     
-    file_path = job["file_path"]
-    if not file_path or not Path(file_path).exists():
+    mp3_path = job["mp3_path"]
+    if not mp3_path or not Path(mp3_path).exists():
         return jsonify({"error": "file not found"}), 404
     
-    format_type = job.get("format", "mp3")
-    safe_name = safe_filename(job["title"] or "media", format_type)
-    
-    # Set appropriate MIME type
-    mime_type = "audio/mpeg" if format_type == "mp3" else "video/mp4"
+    safe_name = safe_filename(job["title"] or "audio", "mp3")
     
     resp = send_file(
-        file_path,
-        mimetype=mime_type,
+        mp3_path,
+        mimetype="audio/mpeg",
         as_attachment=True,
         download_name=safe_name
     )
@@ -1799,55 +1726,40 @@ def download():
     """Direct download endpoint (synchronous)."""
     url = request.args.get("url") or request.form.get("url")
     quality = request.args.get("quality") or request.form.get("quality", "192")
-    format_type = request.args.get("format") or request.form.get("format", "mp3")
     
     if not url:
         return jsonify({"error": "missing url"}), 400
     
-    # Validate format
-    if format_type not in ["mp3", "mp4"]:
-        format_type = "mp3"
-    
-    # Validate quality based on format
-    if format_type == "mp3":
-        valid_qualities = ["128", "192", "256", "320"]
-        if quality not in valid_qualities:
-            quality = "192"
-    else:  # mp4
-        valid_qualities = ["360", "480", "720", "1080"]
-        if quality not in valid_qualities:
-            quality = "720"
+    # Validate quality
+    valid_qualities = ["128", "192", "256", "320"]
+    if quality not in valid_qualities:
+        quality = "192"
 
     try:
         cookiefile = str(COOKIE_PATH) if COOKIE_PATH and COOKIE_PATH.exists() else None
 
-        title, file_path = download_audio_with_fallback(
+        title, mp3_path = download_audio_with_fallback(
             url,
             OUT_DEFAULT,
             cookiefile=cookiefile,
             dsid=YTDLP_DATA_SYNC_ID,
-            quality=quality,
-            format_type=format_type
+            quality=quality
         )
 
-        if not title or title.strip().lower() in ["audio", "media"]:
+        if not title or title.strip().lower() == "audio":
             t2 = fetch_title_with_ytdlp(url, cookiefile, YTDLP_DATA_SYNC_ID)
             if t2:
                 title = t2
 
-        if not title or title.strip().lower() in ["audio", "media"]:
+        if not title or title.strip().lower() == "audio":
             t3 = fetch_title_oembed(url)
             if t3:
                 title = t3
 
-        safe_name = safe_filename(title or "media", format_type)
-        
-        # Set appropriate MIME type
-        mime_type = "audio/mpeg" if format_type == "mp3" else "video/mp4"
-        
+        safe_name = safe_filename(title or "audio", "mp3")
         resp = send_file(
-            file_path,
-            mimetype=mime_type,
+            mp3_path,
+            mimetype="audio/mpeg",
             as_attachment=True,
             download_name=safe_name
         )
@@ -1860,7 +1772,7 @@ def download():
             except Exception:
                 pass
 
-        threading.Thread(target=_cleanup, args=(file_path,), daemon=True).start()
+        threading.Thread(target=_cleanup, args=(mp3_path,), daemon=True).start()
         return resp
 
     except Exception as e:
