@@ -38,12 +38,10 @@ SAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 # Enhanced client list
 CLIENTS_TO_TRY = [
-    "android",
-    "ios",
-    "tv_embedded",
-    "mediaconnect",
-    "mweb",
-    "web",
+    "web",           # Best with cookies - try first
+    "mweb",          # Mobile web - also supports cookies  
+    "mediaconnect",  # Fallback that worked in your logs
+    "tv_embedded",   # TV client
 ]
 
 # ---------- Job Queue System ----------
@@ -90,10 +88,7 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
             }
         },
         "http_headers": {
-            "User-Agent": "com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip" if client == "android"
-                         else "com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)" if client == "ios"
-                         else "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1" if client == "tv_embedded"
-                         else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
     }
