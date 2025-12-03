@@ -84,7 +84,12 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
                 "preferredquality": quality,
             },
             {
+                "key": "FFmpegThumbnailsConvertor",
+                "format": "jpg",
+            },
+            {
                 "key": "EmbedThumbnail",
+                "already_have_thumbnail": False,
             },
             {
                 "key": "FFmpegMetadata",
