@@ -76,11 +76,21 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
         "http_chunk_size": 10485760,
         "age_limit": None,
         "nocheckcertificate": True,
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": quality,
-        }],
+        "writethumbnail": True,
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": quality,
+            },
+            {
+                "key": "EmbedThumbnail",
+            },
+            {
+                "key": "FFmpegMetadata",
+                "add_metadata": True,
+            },
+        ],
         "extractor_args": {
             "youtube": {
                 "player_client": [client],
