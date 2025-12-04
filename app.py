@@ -451,7 +451,7 @@ HOME_HTML = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>YouTube → MP3 | Batch Converter</title>
+  <title>YouTube → MP3 | Premium Audio Converter</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -459,810 +459,1346 @@ HOME_HTML = """<!doctype html>
   <style>
     :root {
       --bg: #050510;
-      --card: rgba(10, 10, 20, 0.8);
+      --bg-dark: #010104;
+      --card: rgba(10, 10, 20, 0.6);
+      --card-hover: rgba(15, 15, 30, 0.7);
       --text: #ffffff;
       --text-dim: #b4b8c5;
       --text-muted: #6b7280;
+      
       --primary: #6366f1;
       --primary-light: #818cf8;
       --primary-dark: #4f46e5;
+      
       --accent: #f0abfc;
+      --accent-2: #fbbf24;
+      --accent-3: #34d399;
+      
+      --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      --gradient-3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      --gradient-rainbow: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #6c5ce7);
+      
       --success: #10b981;
       --warning: #fbbf24;
       --error: #ef4444;
-      --border: rgba(255, 255, 255, 0.1);
+      
+      --glow-primary: 0 0 60px rgba(99, 102, 241, 0.5);
+      --glow-accent: 0 0 60px rgba(240, 171, 252, 0.4);
+      --glow-intense: 0 0 120px rgba(99, 102, 241, 0.6), 0 0 200px rgba(99, 102, 241, 0.3);
+      
+      --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.8);
+      --shadow-2xl: 0 25px 80px rgba(0, 0, 0, 0.9);
+      --shadow-glow: 0 0 100px rgba(99, 102, 241, 0.2);
+      
+      --border: rgba(255, 255, 255, 0.08);
       --border-light: rgba(255, 255, 255, 0.15);
+      
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-slow: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg);
-      min-height: 100vh;
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-dark);
       color: var(--text);
+      min-height: 100vh;
       overflow-x: hidden;
+      position: relative;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-
+    
     /* Animated Background */
-    .bg-animation {
+    .universe-bg {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: -1;
-      overflow: hidden;
+      inset: 0;
+      z-index: 0;
+      background: 
+        radial-gradient(ellipse at top left, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+        radial-gradient(ellipse at bottom right, rgba(240, 171, 252, 0.15) 0%, transparent 40%),
+        radial-gradient(ellipse at center, rgba(79, 70, 229, 0.08) 0%, transparent 60%),
+        linear-gradient(180deg, var(--bg-dark) 0%, var(--bg) 100%);
     }
-
+    
+    /* Animated Stars */
+    .stars {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+    
+    .star {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: white;
+      border-radius: 50%;
+      animation: twinkle 3s ease-in-out infinite;
+      box-shadow: 0 0 6px white;
+    }
+    
+    @keyframes twinkle {
+      0%, 100% { opacity: 0; transform: scale(0.5); }
+      50% { opacity: 1; transform: scale(1); }
+    }
+    
+    /* Floating Particles */
+    .particles {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    
+    .particle {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: var(--primary-light);
+      border-radius: 50%;
+      filter: blur(1px);
+      animation: floatUp 20s linear infinite;
+    }
+    
+    @keyframes floatUp {
+      0% { 
+        transform: translateY(100vh) translateX(0) scale(0);
+        opacity: 0;
+      }
+      10% {
+        opacity: 0.8;
+      }
+      90% {
+        opacity: 0.8;
+      }
+      100% { 
+        transform: translateY(-100vh) translateX(100px) scale(1.5);
+        opacity: 0;
+      }
+    }
+    
+    /* Gradient Orbs */
+    .gradient-orbs {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      filter: blur(100px);
+      opacity: 0.5;
+    }
+    
     .orb {
       position: absolute;
       border-radius: 50%;
-      filter: blur(80px);
-      opacity: 0.5;
-      animation: float 20s infinite ease-in-out;
+      mix-blend-mode: screen;
     }
-
-    .orb:nth-child(1) {
+    
+    .orb1 {
       width: 600px;
       height: 600px;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      top: -200px;
-      left: -200px;
+      background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+      top: -300px;
+      left: -300px;
+      animation: floatOrb1 25s ease-in-out infinite;
     }
-
-    .orb:nth-child(2) {
+    
+    .orb2 {
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+      bottom: -250px;
+      right: -250px;
+      animation: floatOrb2 30s ease-in-out infinite;
+    }
+    
+    .orb3 {
       width: 400px;
       height: 400px;
-      background: linear-gradient(135deg, var(--accent), var(--primary-light));
-      bottom: -100px;
-      right: -100px;
-      animation-delay: -5s;
+      background: radial-gradient(circle, var(--accent-2) 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      animation: floatOrb3 35s ease-in-out infinite;
     }
-
-    @keyframes float {
-      0%, 100% { transform: translate(0, 0) scale(1); }
-      50% { transform: translate(50px, -50px) scale(1.1); }
+    
+    @keyframes floatOrb1 {
+      0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+      33% { transform: translate(100px, 50px) scale(1.1) rotate(120deg); }
+      66% { transform: translate(-50px, 100px) scale(0.9) rotate(240deg); }
     }
-
-    /* Container */
+    
+    @keyframes floatOrb2 {
+      0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+      33% { transform: translate(-100px, -50px) scale(1.2) rotate(-120deg); }
+      66% { transform: translate(50px, -100px) scale(0.8) rotate(-240deg); }
+    }
+    
+    @keyframes floatOrb3 {
+      0%, 100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+      25% { transform: translate(-45%, -55%) scale(1.1) rotate(90deg); }
+      50% { transform: translate(-55%, -45%) scale(0.9) rotate(180deg); }
+      75% { transform: translate(-45%, -50%) scale(1.05) rotate(270deg); }
+    }
+    
+    /* Grid Effect */
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      background-image: 
+        linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+      animation: gridMove 20s linear infinite;
+    }
+    
+    @keyframes gridMove {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(50px, 50px); }
+    }
+    
+    /* Main Container */
     .container {
-      max-width: 700px;
+      position: relative;
+      z-index: 10;
+      max-width: 1200px;
       margin: 0 auto;
-      padding: 40px 20px;
+      padding: 60px 24px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
-
+    
     /* Header */
     .header {
       text-align: center;
-      margin-bottom: 40px;
+      margin-bottom: 60px;
+      animation: fadeInDown 1s ease;
     }
-
-    .logo {
-      width: 80px;
-      height: 80px;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      border-radius: 24px;
+    
+    @keyframes fadeInDown {
+      from { 
+        opacity: 0; 
+        transform: translateY(-40px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0);
+      }
+    }
+    
+    /* Elegant Sound Wave Logo */
+    .logo-container {
+      display: inline-block;
+      margin-bottom: 32px;
+      position: relative;
+    }
+    
+    .logo-wave {
+      width: 120px;
+      height: 120px;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin: 0 auto 24px;
-      box-shadow: 0 10px 40px rgba(99, 102, 241, 0.3);
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(240, 171, 252, 0.1) 100%);
+      border-radius: 30px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 
+        0 8px 32px rgba(99, 102, 241, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      overflow: hidden;
     }
-
-    .logo svg {
-      width: 40px;
-      height: 40px;
-      fill: white;
+    
+    .logo-wave::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, transparent 30%, rgba(99, 102, 241, 0.1) 100%);
+      animation: pulseGlow 3s ease-in-out infinite;
     }
-
+    
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+    
+    .sound-bars {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      height: 50px;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .sound-bar {
+      width: 6px;
+      background: var(--gradient-1);
+      border-radius: 3px;
+      animation: soundWave 1.2s ease-in-out infinite;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+    }
+    
+    .sound-bar:nth-child(1) { 
+      height: 20px; 
+      animation-delay: 0s;
+    }
+    .sound-bar:nth-child(2) { 
+      height: 35px; 
+      animation-delay: 0.1s;
+    }
+    .sound-bar:nth-child(3) { 
+      height: 45px; 
+      animation-delay: 0.2s;
+    }
+    .sound-bar:nth-child(4) { 
+      height: 40px; 
+      animation-delay: 0.3s;
+    }
+    .sound-bar:nth-child(5) { 
+      height: 30px; 
+      animation-delay: 0.4s;
+    }
+    .sound-bar:nth-child(6) { 
+      height: 25px; 
+      animation-delay: 0.5s;
+    }
+    .sound-bar:nth-child(7) { 
+      height: 35px; 
+      animation-delay: 0.6s;
+    }
+    
+    @keyframes soundWave {
+      0%, 100% { 
+        transform: scaleY(1);
+        opacity: 0.8;
+      }
+      50% { 
+        transform: scaleY(1.5);
+        opacity: 1;
+      }
+    }
+    
+    /* Animated Title */
     h1 {
-      font-size: 32px;
-      font-weight: 800;
-      margin-bottom: 8px;
-      background: linear-gradient(135deg, var(--text) 0%, var(--text-dim) 100%);
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 900;
+      margin-bottom: 16px;
+      background: var(--gradient-rainbow);
+      background-size: 200% auto;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 3s linear infinite;
+      letter-spacing: -2px;
+      line-height: 1;
     }
-
+    
+    @keyframes shimmer {
+      0% { background-position: 0% center; }
+      100% { background-position: 200% center; }
+    }
+    
     .subtitle {
-      color: var(--text-muted);
-      font-size: 16px;
-    }
-
-    /* Card */
-    .card {
-      background: var(--card);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--border);
-      border-radius: 24px;
-      padding: 32px;
-    }
-
-    /* Mode Toggle */
-    .mode-toggle {
-      display: flex;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 4px;
-      margin-bottom: 24px;
-    }
-
-    .mode-btn {
-      flex: 1;
-      padding: 12px 16px;
-      background: transparent;
-      border: none;
-      border-radius: 10px;
-      color: var(--text-muted);
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s;
-    }
-
-    .mode-btn.active {
-      background: var(--primary);
-      color: white;
-    }
-
-    .mode-btn:hover:not(.active) {
-      color: var(--text);
-    }
-
-    /* Input Styles */
-    .input-group {
-      margin-bottom: 20px;
-    }
-
-    .input-label {
-      display: block;
+      font-size: 20px;
       color: var(--text-dim);
-      font-size: 14px;
       font-weight: 500;
-      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+      animation: fadeIn 1s ease 0.3s both;
     }
-
-    input, textarea {
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    /* Glassmorphism Card */
+    .card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--border);
+      border-radius: 32px;
+      padding: 56px;
+      box-shadow: 
+        var(--shadow-2xl),
+        var(--shadow-glow),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      animation: cardEntrance 0.8s ease 0.2s both;
+      position: relative;
+      overflow: hidden;
+      transition: var(--transition);
+    }
+    
+    @keyframes cardEntrance {
+      from { 
+        opacity: 0; 
+        transform: translateY(40px) scale(0.95);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
       width: 100%;
-      padding: 16px;
-      background: rgba(255, 255, 255, 0.05);
+      height: 2px;
+      background: var(--gradient-rainbow);
+      animation: scanLine 3s linear infinite;
+    }
+    
+    @keyframes scanLine {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+    
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        var(--shadow-2xl),
+        var(--glow-intense),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      border-color: var(--border-light);
+    }
+    
+    /* Input Group */
+    .input-group {
+      margin-bottom: 32px;
+      position: relative;
+    }
+    
+    .input-wrapper {
+      display: flex;
+      gap: 16px;
+      position: relative;
+    }
+    
+    .input-field {
+      flex: 1;
+      position: relative;
+    }
+    
+    input[type="url"] {
+      width: 100%;
+      padding: 20px 24px;
+      padding-left: 56px;
+      background: rgba(0, 0, 0, 0.4);
       border: 2px solid var(--border);
-      border-radius: 12px;
+      border-radius: 20px;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 500;
+      outline: none;
+      transition: var(--transition);
+      letter-spacing: 0.3px;
+    }
+    
+    input[type="url"]::placeholder {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+    
+    input[type="url"]:focus {
+      border-color: var(--primary);
+      background: rgba(0, 0, 0, 0.6);
+      box-shadow: 
+        0 0 0 4px rgba(99, 102, 241, 0.1),
+        var(--glow-primary);
+      transform: translateY(-1px);
+    }
+    
+    /* Quality Selector */
+    .quality-selector {
+      padding: 20px 16px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px solid var(--border);
+      border-radius: 20px;
       color: var(--text);
       font-size: 15px;
-      font-family: inherit;
-      transition: all 0.3s;
-    }
-
-    textarea {
-      min-height: 150px;
-      resize: vertical;
-      line-height: 1.6;
-    }
-
-    input:focus, textarea:focus {
-      outline: none;
-      border-color: var(--primary);
-      background: rgba(99, 102, 241, 0.1);
-    }
-
-    input::placeholder, textarea::placeholder {
-      color: var(--text-muted);
-    }
-
-    /* Quality Selector */
-    .quality-row {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .quality-option {
-      flex: 1;
-    }
-
-    .quality-option input {
-      display: none;
-    }
-
-    .quality-option label {
-      display: block;
-      padding: 12px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      text-align: center;
-      font-size: 13px;
       font-weight: 600;
-      color: var(--text-muted);
+      outline: none;
+      transition: var(--transition);
       cursor: pointer;
-      transition: all 0.3s;
+      min-width: 120px;
     }
-
-    .quality-option input:checked + label {
-      background: rgba(99, 102, 241, 0.2);
+    
+    .quality-selector:hover {
+      border-color: var(--primary-light);
+      background: rgba(0, 0, 0, 0.5);
+    }
+    
+    .quality-selector:focus {
       border-color: var(--primary);
-      color: var(--primary-light);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
     }
-
-    .quality-option label:hover {
-      border-color: var(--primary);
+    
+    .quality-selector option {
+      background: var(--bg-dark);
+      color: var(--text);
+      padding: 10px;
     }
-
-    /* Button */
-    .btn {
-      width: 100%;
-      padding: 18px 24px;
-      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    
+    /* Input Icon */
+    .input-icon {
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      color: var(--text-muted);
+      transition: var(--transition);
+    }
+    
+    input:focus ~ .input-icon {
+      color: var(--primary);
+    }
+    
+    /* Animated Button */
+    .btn-convert {
+      padding: 20px 48px;
+      background: var(--gradient-1);
       border: none;
-      border-radius: 14px;
+      border-radius: 20px;
       color: white;
       font-size: 16px;
       font-weight: 700;
       cursor: pointer;
-      transition: all 0.3s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
+      transition: var(--transition-bounce);
+      box-shadow: 
+        0 10px 30px rgba(99, 102, 241, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      position: relative;
+      overflow: hidden;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      white-space: nowrap;
     }
-
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 40px rgba(99, 102, 241, 0.4);
+    
+    .btn-convert::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      transition: left 0.5s;
     }
-
-    .btn:disabled {
+    
+    .btn-convert:hover::before {
+      left: 100%;
+    }
+    
+    .btn-convert:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 
+        0 15px 40px rgba(99, 102, 241, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+    
+    .btn-convert:active {
+      transform: translateY(-1px) scale(1);
+    }
+    
+    .btn-convert:disabled {
       opacity: 0.6;
       cursor: not-allowed;
       transform: none;
     }
-
-    .btn svg {
-      width: 20px;
-      height: 20px;
-    }
-
-    /* Batch Queue */
-    .batch-queue {
-      margin-top: 24px;
-      display: none;
-    }
-
-    .batch-queue.active {
-      display: block;
-    }
-
-    .batch-header {
+    
+    /* Status Display */
+    .status-display {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 16px;
+      gap: 16px;
+      padding: 20px 24px;
+      background: linear-gradient(135deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      margin-top: 32px;
+      min-height: 70px;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
     }
-
-    .batch-title {
+    
+    .status-display::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--primary-light), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    
+    .status-display.active::after {
+      opacity: 1;
+      animation: shimmerLine 2s linear infinite;
+    }
+    
+    @keyframes shimmerLine {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    /* Status Indicator */
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      position: relative;
+      flex-shrink: 0;
+      transition: var(--transition);
+    }
+    
+    .status-indicator::before {
+      content: '';
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      background: inherit;
+      opacity: 0.3;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 0.3; }
+      50% { transform: scale(1.5); opacity: 0; }
+    }
+    
+    .status-indicator.ready { background: var(--text-muted); }
+    .status-indicator.processing { background: var(--warning); }
+    .status-indicator.success { background: var(--success); }
+    .status-indicator.error { background: var(--error); }
+    
+    .status-text {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-dim);
+      letter-spacing: 0.3px;
+    }
+    
+    /* Progress Bar */
+    .progress-wrapper {
+      margin-top: 32px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: var(--transition);
+    }
+    
+    .progress-wrapper.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid var(--border);
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: var(--gradient-rainbow);
+      background-size: 200% 100%;
+      border-radius: 999px;
+      animation: progressMove 2s linear infinite, shimmer 2s linear infinite;
+      width: 100%;
+      transform-origin: left;
+    }
+    
+    @keyframes progressMove {
+      0% { transform: scaleX(0) translateX(0); }
+      50% { transform: scaleX(1) translateX(0); }
+      100% { transform: scaleX(1) translateX(100%); }
+    }
+    
+    /* Feature Cards */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 40px;
+    }
+    
+    .feature-card {
+      padding: 24px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      text-align: center;
+      transition: var(--transition);
+      animation: featureFloat 6s ease-in-out infinite;
+      animation-delay: calc(var(--i) * 0.2s);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+      transform: translate(-50%, -50%) scale(0);
+      opacity: 0;
+      transition: var(--transition);
+    }
+    
+    .feature-card:hover::before {
+      transform: translate(-50%, -50%) scale(2);
+      opacity: 0.1;
+    }
+    
+    @keyframes featureFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    
+    .feature-card:hover {
+      transform: translateY(-5px) scale(1.02);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+      border-color: var(--primary);
+      box-shadow: var(--glow-primary);
+    }
+    
+    .feature-icon {
+      font-size: 36px;
+      margin-bottom: 12px;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+      animation: iconRotate 4s ease-in-out infinite;
+      animation-delay: calc(var(--i) * 0.3s);
+    }
+    
+    @keyframes iconRotate {
+      0%, 100% { transform: rotate(0deg) scale(1); }
+      25% { transform: rotate(5deg) scale(1.1); }
+      75% { transform: rotate(-5deg) scale(1.1); }
+    }
+    
+    .feature-title {
       font-size: 16px;
       font-weight: 600;
       color: var(--text);
+      margin-bottom: 8px;
     }
-
-    .batch-progress {
+    
+    .feature-desc {
       font-size: 14px;
       color: var(--text-muted);
+      line-height: 1.5;
     }
-
-    .batch-list {
+    
+    /* Quick Actions */
+    .quick-actions {
       display: flex;
-      flex-direction: column;
-      gap: 8px;
-      max-height: 400px;
-      overflow-y: auto;
-    }
-
-    .batch-item {
-      display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      padding: 14px 16px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      transition: all 0.3s;
+      gap: 20px;
+      margin-top: 32px;
+      flex-wrap: wrap;
     }
-
-    .batch-item.downloading {
-      border-color: var(--warning);
-      background: rgba(251, 191, 36, 0.1);
-    }
-
-    .batch-item.done {
-      border-color: var(--success);
-      background: rgba(16, 185, 129, 0.1);
-    }
-
-    .batch-item.error {
-      border-color: var(--error);
-      background: rgba(239, 68, 68, 0.1);
-    }
-
-    .batch-status-icon {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
+    
+    .action-group {
       display: flex;
+      gap: 16px;
       align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
     }
-
-    .batch-status-icon.queued {
-      background: var(--text-muted);
-    }
-
-    .batch-status-icon.downloading {
-      background: var(--warning);
-      animation: pulse 1.5s infinite;
-    }
-
-    .batch-status-icon.done {
-      background: var(--success);
-    }
-
-    .batch-status-icon.error {
-      background: var(--error);
-    }
-
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.1); opacity: 0.7; }
-    }
-
-    .batch-status-icon svg {
-      width: 14px;
-      height: 14px;
-      fill: white;
-    }
-
-    .batch-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .batch-item-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .batch-item-url {
-      font-size: 12px;
-      color: var(--text-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .batch-item-download {
-      padding: 8px 12px;
-      background: var(--success);
-      border: none;
-      border-radius: 8px;
-      color: white;
-      font-size: 12px;
+    
+    .action-link {
+      color: var(--primary-light);
+      text-decoration: none;
       font-weight: 600;
-      cursor: pointer;
-      opacity: 0;
-      transition: all 0.3s;
+      font-size: 14px;
+      transition: var(--transition);
+      position: relative;
+      padding: 8px 16px;
+      border-radius: 8px;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid transparent;
     }
-
-    .batch-item.done .batch-item-download {
-      opacity: 1;
+    
+    .action-link:hover {
+      background: rgba(99, 102, 241, 0.2);
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
     }
-
-    /* Download All Button */
-    .download-all {
-      margin-top: 16px;
-      background: linear-gradient(135deg, var(--success), #059669);
-      display: none;
+    
+    /* Health Badge */
+    .health-badge {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--success);
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      transition: var(--transition);
     }
-
-    .download-all.active {
-      display: flex;
+    
+    .health-badge.loading {
+      background: linear-gradient(135deg, rgba(156, 163, 175, 0.1) 0%, rgba(156, 163, 175, 0.05) 100%);
+      border-color: rgba(156, 163, 175, 0.3);
+      color: var(--text-muted);
     }
-
-    /* Single Mode Elements */
-    .single-input { display: block; }
-    .batch-input { display: none; }
-
-    .mode-batch .single-input { display: none; }
-    .mode-batch .batch-input { display: block; }
-
-    /* Toast */
+    
+    .health-badge.error {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: var(--error);
+    }
+    
+    .health-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 2s ease-in-out infinite;
+    }
+    
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    
+    /* Spinner */
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Toast Notification */
     .toast {
       position: fixed;
-      bottom: 30px;
+      bottom: 40px;
       left: 50%;
-      transform: translateX(-50%) translateY(100px);
-      background: var(--card);
-      border: 1px solid var(--border);
-      padding: 16px 24px;
-      border-radius: 12px;
+      transform: translateX(-50%) translateY(100px) scale(0.9);
+      padding: 20px 32px;
+      background: linear-gradient(135deg, rgba(17, 24, 39, 0.95) 0%, rgba(10, 10, 20, 0.95) 100%);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-light);
+      border-radius: 20px;
+      box-shadow: 
+        var(--shadow-2xl),
+        var(--glow-primary);
       color: var(--text);
-      font-size: 14px;
-      opacity: 0;
-      transition: all 0.3s;
+      font-weight: 500;
       z-index: 1000;
+      opacity: 0;
+      transition: var(--transition-bounce);
+      font-size: 15px;
+      letter-spacing: 0.3px;
     }
-
+    
     .toast.show {
-      transform: translateX(-50%) translateY(0);
       opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
     }
-
-    /* Status */
-    .status-display {
-      display: none;
-      align-items: center;
-      gap: 12px;
-      padding: 16px;
-      background: rgba(255, 255, 255, 0.03);
-      border-radius: 12px;
-      margin-top: 16px;
+    
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 60px;
+      padding-top: 40px;
+      border-top: 1px solid var(--border);
+      animation: fadeInUp 0.8s ease 0.6s both;
     }
-
-    .status-display.active {
-      display: flex;
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--text-muted);
-    }
-
-    .status-dot.processing {
-      background: var(--warning);
-      animation: pulse 1.5s infinite;
-    }
-
-    .status-dot.success {
-      background: var(--success);
-    }
-
-    .status-dot.error {
-      background: var(--error);
-    }
-
-    .status-text {
-      color: var(--text-dim);
+    
+    .footer-text {
+      color: var(--text-muted);
       font-size: 14px;
+      margin-bottom: 16px;
     }
-
-    /* Responsive */
-    @media (max-width: 600px) {
-      .container { padding: 20px 16px; }
-      .card { padding: 24px 20px; }
-      h1 { font-size: 26px; }
-      .quality-row { flex-wrap: wrap; }
-      .quality-option { flex: 1 1 45%; }
+    
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    
+    .footer-link {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 13px;
+      transition: var(--transition);
+      position: relative;
+    }
+    
+    .footer-link:hover {
+      color: var(--primary-light);
+    }
+    
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .container { padding: 40px 20px; }
+      .card { padding: 40px 28px; }
+      h1 { font-size: 36px; }
+      .input-wrapper { flex-direction: column; }
+      .btn-convert { width: 100%; }
+      .quick-actions { flex-direction: column; align-items: stretch; }
+      .action-group { flex-direction: column; width: 100%; }
+      .action-link { width: 100%; text-align: center; }
+      .features-grid { grid-template-columns: 1fr; }
+      .logo-wave { 
+        width: 90px; 
+        height: 90px; 
+      }
+      .sound-bars {
+        height: 40px;
+      }
+      .sound-bar:nth-child(1) { height: 15px; }
+      .sound-bar:nth-child(2) { height: 25px; }
+      .sound-bar:nth-child(3) { height: 35px; }
+      .sound-bar:nth-child(4) { height: 30px; }
+      .sound-bar:nth-child(5) { height: 22px; }
+      .sound-bar:nth-child(6) { height: 18px; }
+      .sound-bar:nth-child(7) { height: 26px; }
+    }
+    
+    @keyframes fadeInUp {
+      from { 
+        opacity: 0; 
+        transform: translateY(30px);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0);
+      }
+    }
+    
+    /* Loading Animation */
+    .loading-dots {
+      display: inline-flex;
+      gap: 4px;
+    }
+    
+    .loading-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--primary);
+      border-radius: 50%;
+      animation: loadingBounce 1.4s ease-in-out infinite;
+    }
+    
+    .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+    .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+    
+    @keyframes loadingBounce {
+      0%, 80%, 100% { 
+        transform: scale(0);
+        opacity: 0.5;
+      }
+      40% { 
+        transform: scale(1);
+        opacity: 1;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="bg-animation">
-    <div class="orb"></div>
-    <div class="orb"></div>
+  <!-- Animated Background Layers -->
+  <div class="universe-bg"></div>
+  <div class="grid-bg"></div>
+  <div class="gradient-orbs">
+    <div class="orb orb1"></div>
+    <div class="orb orb2"></div>
+    <div class="orb orb3"></div>
   </div>
+  
+  <!-- Stars Background -->
+  <div class="stars" id="stars"></div>
+  
+  <!-- Floating Particles -->
+  <div class="particles" id="particles"></div>
 
+  <!-- Main Content -->
   <div class="container">
     <div class="header">
-      <div class="logo">
-        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+      <div class="logo-container">
+        <div class="logo-wave">
+          <div class="sound-bars">
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+            <div class="sound-bar"></div>
+          </div>
+        </div>
       </div>
       <h1>YouTube → MP3 Converter</h1>
-      <p class="subtitle">Convert single videos or batch download multiple at once</p>
+      <p class="subtitle">Transform any YouTube video into premium quality audio instantly</p>
     </div>
 
-    <div class="card" id="mainCard">
-      <!-- Mode Toggle -->
-      <div class="mode-toggle">
-        <button class="mode-btn active" data-mode="single">Single URL</button>
-        <button class="mode-btn" data-mode="batch">Batch Mode</button>
-      </div>
-
+    <div class="card">
       <form id="form">
-        <!-- Single URL Input -->
-        <div class="input-group single-input">
-          <label class="input-label">YouTube URL</label>
-          <input type="url" id="singleUrl" placeholder="https://www.youtube.com/watch?v=..." />
-        </div>
-
-        <!-- Batch URLs Input -->
-        <div class="input-group batch-input">
-          <label class="input-label">YouTube URLs (one per line, max 20)</label>
-          <textarea id="batchUrls" placeholder="https://www.youtube.com/watch?v=abc123
-https://youtu.be/xyz789
-https://www.youtube.com/watch?v=..."></textarea>
-        </div>
-
-        <!-- Quality Selection -->
         <div class="input-group">
-          <label class="input-label">Audio Quality</label>
-          <div class="quality-row">
-            <div class="quality-option">
-              <input type="radio" name="quality" id="q128" value="128">
-              <label for="q128">128 kbps</label>
+          <div class="input-wrapper">
+            <div class="input-field">
+              <input 
+                id="url" 
+                type="url" 
+                required 
+                placeholder="Paste your YouTube URL here..."
+                autocomplete="off"
+              />
+              <svg class="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+              </svg>
             </div>
-            <div class="quality-option">
-              <input type="radio" name="quality" id="q192" value="192" checked>
-              <label for="q192">192 kbps</label>
-            </div>
-            <div class="quality-option">
-              <input type="radio" name="quality" id="q256" value="256">
-              <label for="q256">256 kbps</label>
-            </div>
-            <div class="quality-option">
-              <input type="radio" name="quality" id="q320" value="320">
-              <label for="q320">320 kbps</label>
-            </div>
+            <select class="quality-selector" id="qualitySelect">
+              <option value="128">128 kbps</option>
+              <option value="192" selected>192 kbps</option>
+              <option value="256">256 kbps</option>
+              <option value="320">320 kbps</option>
+            </select>
+            <button class="btn-convert" id="convertBtn" type="submit">
+              <span id="btnText">Convert Now</span>
+            </button>
           </div>
         </div>
 
-        <button type="submit" class="btn" id="convertBtn">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-          </svg>
-          <span id="btnText">Convert Now</span>
-        </button>
+        <div class="quick-actions">
+          <div class="action-group">
+            <a href="#" id="sampleLink" class="action-link">✨ Try Sample</a>
+            <span class="health-badge loading" id="healthBadge">
+              <span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span>
+              <span>Checking...</span>
+            </span>
+          </div>
+          <a href="/chrome-extension" class="action-link" download>🚀 Browser Extension</a>
+        </div>
+
+        <div class="progress-wrapper" id="progressWrapper">
+          <div class="progress-bar">
+            <div class="progress-fill"></div>
+          </div>
+        </div>
+
+        <div class="status-display" id="statusDisplay">
+          <div class="status-indicator ready" id="statusIndicator"></div>
+          <span class="status-text" id="statusText">Ready to convert your audio</span>
+        </div>
       </form>
 
-      <!-- Single Status -->
-      <div class="status-display" id="statusDisplay">
-        <div class="status-dot" id="statusDot"></div>
-        <span class="status-text" id="statusText">Ready</span>
-      </div>
-
-      <!-- Batch Queue -->
-      <div class="batch-queue" id="batchQueue">
-        <div class="batch-header">
-          <span class="batch-title">Download Queue</span>
-          <span class="batch-progress" id="batchProgress">0 / 0</span>
+      <div class="features-grid">
+        <div class="feature-card" style="--i: 0;">
+          <div class="feature-icon">🎵</div>
+          <div class="feature-title">Premium Quality</div>
+          <div class="feature-desc">Crystal clear 192kbps MP3 audio extraction</div>
         </div>
-        <div class="batch-list" id="batchList"></div>
-        <button class="btn download-all" id="downloadAll">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-          </svg>
-          Download All as ZIP
-        </button>
+        <div class="feature-card" style="--i: 1;">
+          <div class="feature-icon">⚡</div>
+          <div class="feature-title">Lightning Fast</div>
+          <div class="feature-desc">Optimized processing with smart caching</div>
+        </div>
+        <div class="feature-card" style="--i: 2;">
+          <div class="feature-icon">🔄</div>
+          <div class="feature-title">Smart Fallbacks</div>
+          <div class="feature-desc">Multiple extraction methods for reliability</div>
+        </div>
+        <div class="feature-card" style="--i: 3;">
+          <div class="feature-icon">📱</div>
+          <div class="feature-title">Universal Support</div>
+          <div class="feature-desc">Works perfectly on all devices</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p class="footer-text">Powered by advanced audio extraction technology</p>
+      <div class="footer-links">
+        <a href="#" class="footer-link">Privacy Policy</a>
+        <a href="#" class="footer-link">Terms of Service</a>
+        <a href="#" class="footer-link">API Access</a>
+        <a href="#" class="footer-link">Support</a>
       </div>
     </div>
   </div>
 
+  <!-- Toast Notification -->
   <div class="toast" id="toast"></div>
 
   <script>
-    const $ = s => document.querySelector(s);
-    const $$ = s => document.querySelectorAll(s);
-
+    // Selectors
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+    
     // Elements
-    const mainCard = $('#mainCard');
+    const statusIndicator = $('#statusIndicator');
+    const statusText = $('#statusText');
+    const statusDisplay = $('#statusDisplay');
+    const progressWrapper = $('#progressWrapper');
+    const toast = $('#toast');
     const form = $('#form');
-    const singleUrl = $('#singleUrl');
-    const batchUrls = $('#batchUrls');
+    const urlInput = $('#url');
     const convertBtn = $('#convertBtn');
     const btnText = $('#btnText');
-    const statusDisplay = $('#statusDisplay');
-    const statusDot = $('#statusDot');
-    const statusText = $('#statusText');
-    const batchQueue = $('#batchQueue');
-    const batchList = $('#batchList');
-    const batchProgress = $('#batchProgress');
-    const downloadAll = $('#downloadAll');
-    const toast = $('#toast');
+    const healthBadge = $('#healthBadge');
+    const sampleLink = $('#sampleLink');
 
-    let currentMode = 'single';
-    let currentBatchId = null;
+    // Generate random stars
+    function createStars() {
+      const starsContainer = $('#stars');
+      const numberOfStars = 100;
+      
+      for (let i = 0; i < numberOfStars; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 100 + '%';
+        star.style.animationDelay = Math.random() * 3 + 's';
+        star.style.animationDuration = 3 + Math.random() * 2 + 's';
+        starsContainer.appendChild(star);
+      }
+    }
 
-    // Mode toggle
-    $$('.mode-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        $$('.mode-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentMode = btn.dataset.mode;
-        mainCard.className = 'card' + (currentMode === 'batch' ? ' mode-batch' : '');
-        batchQueue.classList.remove('active');
-        statusDisplay.classList.remove('active');
-      });
-    });
+    // Generate floating particles
+    function createParticles() {
+      const particlesContainer = $('#particles');
+      const numberOfParticles = 30;
+      
+      for (let i = 0; i < numberOfParticles; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        particle.style.left = Math.random() * 100 + '%';
+        particle.style.animationDelay = Math.random() * 20 + 's';
+        particle.style.animationDuration = 20 + Math.random() * 10 + 's';
+        particlesContainer.appendChild(particle);
+      }
+    }
 
-    // Toast
-    function showToast(msg) {
-      toast.textContent = msg;
+    // Initialize background effects
+    createStars();
+    createParticles();
+
+    // Status management
+    function setStatus(type, message, showSpinner = false) {
+      statusText.textContent = message;
+      statusIndicator.className = 'status-indicator ' + type;
+      statusDisplay.classList.toggle('active', type === 'processing');
+      
+      if (showSpinner) {
+        const loadingHtml = '<div class="loading-dots"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>';
+        statusText.innerHTML = loadingHtml + ' ' + message;
+      }
+    }
+
+    // Toast notifications
+    function showToast(message) {
+      toast.textContent = message;
       toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
+      setTimeout(() => toast.classList.remove('show'), 4000);
     }
 
-    // Status
-    function setStatus(type, msg) {
-      statusDisplay.classList.add('active');
-      statusDot.className = 'status-dot ' + type;
-      statusText.textContent = msg;
-    }
-
-    // Validate YouTube URL
-    function isValidYT(url) {
+    // URL validation
+    function isValidYouTubeURL(url) {
       return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(url);
     }
 
-    // Single download
-    async function handleSingle(url, quality) {
-      setStatus('processing', 'Starting conversion...');
-      
-      const resp = await fetch('/enqueue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ url, quality })
-      });
-      
-      if (!resp.ok) {
-        setStatus('error', 'Failed to start conversion');
-        return;
-      }
-      
-      const data = await resp.json();
-      const jobId = data.job_id;
-      
-      setStatus('processing', 'Converting: ' + (data.title || 'Loading...'));
-      
-      // Poll for status
-      const poll = setInterval(async () => {
-        const statusResp = await fetch('/status/' + jobId);
-        const status = await statusResp.json();
-        
-        if (status.status === 'done') {
-          clearInterval(poll);
-          setStatus('success', 'Complete! Downloading...');
-          showToast('🎉 Download ready!');
-          window.location.href = '/download_job/' + jobId;
-          convertBtn.disabled = false;
-          btnText.textContent = 'Convert Now';
-        } else if (status.status === 'error') {
-          clearInterval(poll);
-          setStatus('error', status.error || 'Conversion failed');
-          showToast('❌ Conversion failed');
-          convertBtn.disabled = false;
-          btnText.textContent = 'Convert Now';
+    // Health check
+    fetch('/health')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.ok) {
+          healthBadge.className = 'health-badge';
+          healthBadge.innerHTML = '<div class="health-dot"></div><span>Online</span>';
         } else {
-          setStatus('processing', 'Converting: ' + (status.title || 'Processing...'));
+          throw new Error();
         }
-      }, 2000);
-    }
-
-    // Batch download
-    async function handleBatch(urls, quality) {
-      batchQueue.classList.add('active');
-      batchList.innerHTML = '';
-      downloadAll.classList.remove('active');
-      
-      const resp = await fetch('/batch_enqueue', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ urls, quality })
+      })
+      .catch(() => {
+        healthBadge.className = 'health-badge error';
+        healthBadge.innerHTML = '<span>Offline</span>';
       });
-      
-      if (!resp.ok) {
-        const err = await resp.json();
-        showToast('❌ ' + (err.error || 'Failed to start batch'));
-        convertBtn.disabled = false;
-        btnText.textContent = 'Convert Now';
-        return;
-      }
-      
-      const data = await resp.json();
-      currentBatchId = data.batch_id;
-      
-      // Initialize list
-      data.jobs.forEach((job, i) => {
-        const item = document.createElement('div');
-        item.className = 'batch-item';
-        item.id = 'job-' + job.job_id;
-        item.innerHTML = '<div class="batch-status-icon queued"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg></div><div class="batch-info"><div class="batch-item-title">Waiting...</div><div class="batch-item-url">' + job.url + '</div></div><button class="batch-item-download" onclick="window.location.href=\'/download_job/' + job.job_id + '\'">Download</button>';
-        batchList.appendChild(item);
-      });
-      
-      batchProgress.textContent = '0 / ' + data.total;
-      
-      // Poll for batch status
-      const poll = setInterval(async () => {
-        const statusResp = await fetch('/batch_status/' + currentBatchId);
-        const status = await statusResp.json();
-        
-        batchProgress.textContent = status.completed + ' / ' + status.total;
-        
-        // Update each job
-        status.jobs.forEach(job => {
-          const item = $('#job-' + job.job_id);
-          if (!item) return;
-          
-          item.className = 'batch-item ' + job.status;
-          item.querySelector('.batch-item-title').textContent = job.title || 'Processing...';
-          
-          const icon = item.querySelector('.batch-status-icon');
-          icon.className = 'batch-status-icon ' + job.status;
-          
-          if (job.status === 'done') {
-            icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
-          } else if (job.status === 'error') {
-            icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
-          } else if (job.status === 'downloading') {
-            icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>';
-          }
-        });
-        
-        if (status.status === 'done') {
-          clearInterval(poll);
-          showToast('✅ Batch complete! ' + status.completed + '/' + status.total + ' successful');
-          convertBtn.disabled = false;
-          btnText.textContent = 'Convert Now';
-          
-          if (status.completed > 0) {
-            downloadAll.classList.add('active');
-          }
-        }
-      }, 2000);
-    }
 
-    // Download all
-    downloadAll.addEventListener('click', () => {
-      if (currentBatchId) {
-        window.location.href = '/batch_download/' + currentBatchId;
-      }
+    // Sample video
+    sampleLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      urlInput.value = 'http://www.youtube.com/watch?v=JK_hBk2f01k';
+      showToast('✨ Sample video loaded - Click Convert Now!');
+      urlInput.focus();
+      
+      // Add visual feedback
+      urlInput.style.animation = 'pulse 0.5s';
+      setTimeout(() => {
+        urlInput.style.animation = '';
+      }, 500);
     });
 
-    // Form submit
+    // Queue system
+    async function tryEnqueue(url, quality = '192') {
+      try {
+        const resp = await fetch('/enqueue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ url, quality })
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        return data.job_id || null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Job polling
+    async function pollJob(jobId) {
+      progressWrapper.classList.add('active');
+      const startTime = Date.now();
+      
+      const interval = setInterval(async () => {
+        try {
+          const resp = await fetch('/status/' + jobId);
+          if (!resp.ok) {
+            clearInterval(interval);
+            setStatus('error', 'Status check failed');
+            progressWrapper.classList.remove('active');
+            convertBtn.disabled = false;
+            btnText.textContent = 'Convert Now';
+            return;
+          }
+          
+          const status = await resp.json();
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          
+          if (status.status === 'done') {
+            clearInterval(interval);
+            progressWrapper.classList.remove('active');
+            setStatus('success', '✓ Conversion complete! Downloading...');
+            convertBtn.disabled = false;
+            btnText.textContent = 'Convert Now';
+            showToast('🎉 Your MP3 is ready!');
+            
+            window.location.href = '/download_job/' + jobId;
+          } else if (status.status === 'error') {
+            clearInterval(interval);
+            progressWrapper.classList.remove('active');
+            setStatus('error', status.error || 'Conversion failed');
+            convertBtn.disabled = false;
+            btnText.textContent = 'Convert Now';
+            showToast('❌ Conversion failed. Please try again.');
+          } else {
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            const timeStr = minutes > 0 ? minutes + 'm ' + seconds + 's' : seconds + 's';
+            setStatus('processing', 'Converting... ' + timeStr, true);
+          }
+        } catch (e) {
+          clearInterval(interval);
+          progressWrapper.classList.remove('active');
+          setStatus('error', 'Connection error');
+          convertBtn.disabled = false;
+          btnText.textContent = 'Convert Now';
+        }
+      }, 2000);
+    }
+
+    // Form submission
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       
-      const quality = document.querySelector('input[name="quality"]:checked').value;
+      const url = urlInput.value.trim();
+      const quality = $('#qualitySelect').value;
       
+      if (!url) {
+        setStatus('error', 'Please paste a YouTube URL');
+        showToast('⚠️ URL field is empty');
+        urlInput.focus();
+        return;
+      }
+      
+      if (!isValidYouTubeURL(url)) {
+        setStatus('error', 'Invalid YouTube URL');
+        showToast('❌ Please enter a valid YouTube link');
+        return;
+      }
+
       convertBtn.disabled = true;
       btnText.textContent = 'Processing...';
+      setStatus('processing', `Initializing conversion (${quality}kbps)...`, true);
+
+      const jobId = await tryEnqueue(url, quality);
       
-      if (currentMode === 'single') {
-        const url = singleUrl.value.trim();
-        if (!url) {
-          showToast('⚠️ Please enter a URL');
-          convertBtn.disabled = false;
-          btnText.textContent = 'Convert Now';
-          return;
-        }
-        if (!isValidYT(url)) {
-          showToast('❌ Invalid YouTube URL');
-          convertBtn.disabled = false;
-          btnText.textContent = 'Convert Now';
-          return;
-        }
-        await handleSingle(url, quality);
+      if (jobId) {
+        showToast(`✓ Processing at ${quality}kbps - Please wait...`);
+        await pollJob(jobId);
       } else {
-        const urls = batchUrls.value.trim();
-        if (!urls) {
-          showToast('⚠️ Please enter URLs');
+        setStatus('processing', `Direct conversion at ${quality}kbps...`, true);
+        progressWrapper.classList.add('active');
+        
+        const downloadUrl = '/download?url=' + encodeURIComponent(url) + '&quality=' + quality;
+        window.open(downloadUrl, '_blank');
+        
+        setTimeout(() => {
+          progressWrapper.classList.remove('active');
+          setStatus('success', 'Download started in new tab');
           convertBtn.disabled = false;
           btnText.textContent = 'Convert Now';
-          return;
-        }
-        await handleBatch(urls, quality);
+          showToast('✓ Download initiated');
+        }, 3000);
       }
+    });
+
+    // URL parameter handling
+    try {
+      const params = new URLSearchParams(location.search);
+      const urlParam = params.get('url');
+      if (urlParam) {
+        urlInput.value = urlParam;
+        setStatus('ready', 'URL loaded - Click Convert Now');
+        showToast('✨ URL loaded from link');
+      }
+    } catch (e) {}
+
+    // Add subtle parallax effect on mouse move
+    document.addEventListener('mousemove', (e) => {
+      const x = e.clientX / window.innerWidth;
+      const y = e.clientY / window.innerHeight;
+      
+      const orbs = $$('.orb');
+      orbs.forEach((orb, index) => {
+        const speed = (index + 1) * 10;
+        orb.style.transform = `translate(${x * speed}px, ${y * speed}px)`;
+      });
     });
   </script>
 </body>
