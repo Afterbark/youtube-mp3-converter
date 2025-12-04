@@ -7,6 +7,7 @@ import uuid
 import urllib.parse
 import urllib.request
 import threading
+import zipfile
 from pathlib import Path
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file, render_template_string
@@ -38,14 +39,15 @@ SAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 # Enhanced client list
 CLIENTS_TO_TRY = [
-    "web",           # Best with cookies - try first
-    "mweb",          # Mobile web - also supports cookies  
-    "mediaconnect",  # Fallback that worked in your logs
-    "tv_embedded",   # TV client
+    "web",
+    "mweb",
+    "mediaconnect",
+    "tv_embedded",
 ]
 
 # ---------- Job Queue System ----------
 job_queue = {}
+batch_queue = {}
 
 def safe_filename(name: str) -> str:
     """Sanitize filename for safe download."""
@@ -60,7 +62,7 @@ def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, c
     """Build optimized yt-dlp options with FLEXIBLE format selection to prevent errors."""
     
     opts = {
-        "format": "ba/b",  # Best audio, or best overall if audio-only not available
+        "format": "ba/b",
         "paths": {"home": str(DOWNLOAD_DIR), "temp": str(DOWNLOAD_DIR)},
         "outtmpl": {"default": out_default},
         "noprogress": True,
@@ -137,29 +139,6 @@ def fetch_title_with_ytdlp(url: str) -> str:
     return "Unknown"
 
 
-def _resolve_mp3_path(job_id: str, url: str, quality: str) -> Path:
-    """Resolve the final downloaded MP3 file path."""
-    cookiefile = str(COOKIE_PATH) if COOKIE_PATH else None
-    dsid = YTDLP_DATA_SYNC_ID
-    
-    for client in CLIENTS_TO_TRY:
-        try:
-            opts = _base_ydl_opts(OUT_DEFAULT, cookiefile, dsid, client, quality)
-            opts["skip_download"] = True
-            opts["quiet"] = True
-            
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                video_id = info.get("id", "unknown")
-                return DOWNLOAD_DIR / f"yt_{video_id}.mp3"
-        except Exception as e:
-            print(f"Client {client} failed for path resolution: {e}", flush=True)
-            continue
-    
-    # Fallback
-    return DOWNLOAD_DIR / f"yt_{job_id}.mp3"
-
-
 def download_task(job_id: str, url: str, quality: str):
     """Background task to download with multiple client fallbacks."""
     job_queue[job_id]["status"] = "downloading"
@@ -211,6 +190,47 @@ def download_task(job_id: str, url: str, quality: str):
     print(f"[{job_id}] ✗ All clients exhausted", flush=True)
 
 
+def batch_download_task(batch_id: str, urls: list, quality: str):
+    """Background task to download multiple URLs sequentially."""
+    batch = batch_queue[batch_id]
+    
+    for i, url in enumerate(urls):
+        job_id = batch["jobs"][i]["job_id"]
+        
+        # Update batch progress
+        batch["current_index"] = i
+        batch["jobs"][i]["status"] = "downloading"
+        
+        # Create job entry
+        job_queue[job_id] = {
+            "status": "downloading",
+            "url": url,
+            "title": "Fetching...",
+            "quality": quality,
+            "error": None,
+            "file_path": None,
+            "created_at": datetime.now().isoformat()
+        }
+        
+        # Download
+        download_task(job_id, url, quality)
+        
+        # Update batch job status from job_queue
+        job = job_queue[job_id]
+        batch["jobs"][i]["status"] = job["status"]
+        batch["jobs"][i]["title"] = job.get("title", "Unknown")
+        batch["jobs"][i]["error"] = job.get("error")
+        batch["jobs"][i]["file_path"] = job.get("file_path")
+        
+        if job["status"] == "done":
+            batch["completed"] += 1
+        elif job["status"] == "error":
+            batch["failed"] += 1
+    
+    batch["status"] = "done"
+    print(f"[BATCH {batch_id}] ✓ Completed: {batch['completed']}/{batch['total']}, Failed: {batch['failed']}", flush=True)
+
+
 @app.route("/")
 def home():
     return render_template_string(HOME_HTML)
@@ -224,20 +244,18 @@ def health():
 
 @app.route("/enqueue", methods=["POST"])
 def enqueue():
-    """Enqueue a download job with quality options."""
+    """Enqueue a single download job."""
     url = request.form.get("url", "").strip()
     quality = request.form.get("quality", "192").strip()
     
     if not url:
         return jsonify({"error": "URL required"}), 400
     
-    # Validate quality
     if quality not in ["128", "192", "256", "320"]:
         quality = "192"
     
     job_id = str(uuid.uuid4())
     
-    # Fetch title
     try:
         title = fetch_title_with_ytdlp(url)
     except:
@@ -253,7 +271,6 @@ def enqueue():
         "created_at": datetime.now().isoformat()
     }
     
-    # Start download in background
     thread = threading.Thread(target=download_task, args=(job_id, url, quality))
     thread.daemon = True
     thread.start()
@@ -264,6 +281,127 @@ def enqueue():
         "title": title,
         "quality": quality
     })
+
+
+@app.route("/batch_enqueue", methods=["POST"])
+def batch_enqueue():
+    """Enqueue multiple URLs for batch download."""
+    urls_raw = request.form.get("urls", "").strip()
+    quality = request.form.get("quality", "192").strip()
+    
+    if not urls_raw:
+        return jsonify({"error": "URLs required"}), 400
+    
+    if quality not in ["128", "192", "256", "320"]:
+        quality = "192"
+    
+    # Parse URLs (split by newlines, commas, or spaces)
+    urls = []
+    for line in urls_raw.replace(",", "\n").split("\n"):
+        url = line.strip()
+        if url and ("youtube.com" in url or "youtu.be" in url):
+            urls.append(url)
+    
+    if not urls:
+        return jsonify({"error": "No valid YouTube URLs found"}), 400
+    
+    if len(urls) > 20:
+        return jsonify({"error": "Maximum 20 URLs per batch"}), 400
+    
+    batch_id = str(uuid.uuid4())
+    
+    # Create batch entry
+    batch_queue[batch_id] = {
+        "status": "processing",
+        "total": len(urls),
+        "completed": 0,
+        "failed": 0,
+        "current_index": 0,
+        "quality": quality,
+        "created_at": datetime.now().isoformat(),
+        "jobs": [
+            {
+                "job_id": str(uuid.uuid4()),
+                "url": url,
+                "status": "queued",
+                "title": "Waiting...",
+                "error": None,
+                "file_path": None
+            }
+            for url in urls
+        ]
+    }
+    
+    # Start batch download in background
+    thread = threading.Thread(target=batch_download_task, args=(batch_id, urls, quality))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        "batch_id": batch_id,
+        "total": len(urls),
+        "status": "processing",
+        "jobs": [{"job_id": j["job_id"], "url": j["url"], "status": "queued"} for j in batch_queue[batch_id]["jobs"]]
+    })
+
+
+@app.route("/batch_status/<batch_id>", methods=["GET"])
+def batch_status(batch_id):
+    """Get batch download status."""
+    batch = batch_queue.get(batch_id)
+    if not batch:
+        return jsonify({"error": "Batch not found"}), 404
+    
+    return jsonify({
+        "batch_id": batch_id,
+        "status": batch["status"],
+        "total": batch["total"],
+        "completed": batch["completed"],
+        "failed": batch["failed"],
+        "current_index": batch["current_index"],
+        "jobs": [
+            {
+                "job_id": j["job_id"],
+                "url": j["url"],
+                "status": j["status"],
+                "title": j["title"],
+                "error": j.get("error")
+            }
+            for j in batch["jobs"]
+        ]
+    })
+
+
+@app.route("/batch_download/<batch_id>", methods=["GET"])
+def batch_download(batch_id):
+    """Download all completed files as a ZIP."""
+    batch = batch_queue.get(batch_id)
+    if not batch:
+        return jsonify({"error": "Batch not found"}), 404
+    
+    # Collect completed files
+    files_to_zip = []
+    for job in batch["jobs"]:
+        if job["status"] == "done" and job.get("file_path"):
+            file_path = Path(job["file_path"])
+            if file_path.exists():
+                files_to_zip.append((file_path, safe_filename(job.get("title", "audio"))))
+    
+    if not files_to_zip:
+        return jsonify({"error": "No completed files to download"}), 400
+    
+    # Create ZIP file
+    zip_path = DOWNLOAD_DIR / f"batch_{batch_id}.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file_path, filename in files_to_zip:
+            zf.write(file_path, filename)
+    
+    return send_file(
+        zip_path,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"youtube_mp3_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    )
 
 
 @app.route("/status/<job_id>", methods=["GET"])
@@ -307,53 +445,6 @@ def download_job(job_id):
         as_attachment=True,
         download_name=safe_name
     )
-
-
-@app.route("/download", methods=["GET"])
-def download_direct():
-    """Direct download endpoint (legacy support)."""
-    url = request.args.get("url", "").strip()
-    quality = request.args.get("quality", "192").strip()
-    
-    if not url:
-        return jsonify({"error": "URL required"}), 400
-    
-    if quality not in ["128", "192", "256", "320"]:
-        quality = "192"
-    
-    cookiefile = str(COOKIE_PATH) if COOKIE_PATH else None
-    dsid = YTDLP_DATA_SYNC_ID
-    
-    for client in CLIENTS_TO_TRY:
-        try:
-            opts = _base_ydl_opts(OUT_DEFAULT, cookiefile, dsid, client, quality)
-            
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                title = info.get("title", "Unknown")
-                video_id = info.get("id", "unknown")
-                
-                downloaded_file = DOWNLOAD_DIR / f"yt_{video_id}.mp3"
-                
-                if not downloaded_file.exists():
-                    pattern = f"yt_{video_id}.*"
-                    matches = list(DOWNLOAD_DIR.glob(pattern))
-                    if matches:
-                        downloaded_file = matches[0]
-                
-                if downloaded_file.exists():
-                    safe_name = safe_filename(title)
-                    return send_file(
-                        downloaded_file,
-                        mimetype="audio/mpeg",
-                        as_attachment=True,
-                        download_name=safe_name
-                    )
-        except Exception as e:
-            print(f"Client {client} failed: {e}", flush=True)
-            continue
-    
-    return jsonify({"error": "All download attempts failed"}), 500
 
 
 HOME_HTML = """<!doctype html>
