@@ -100,6 +100,94 @@ def fetch_title_with_ytdlp(url: str) -> str:
             continue
     return "Unknown"
 
+def format_duration(seconds):
+    if not seconds:
+        return "Unknown"
+    seconds = int(seconds)
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+def fetch_video_info(url: str) -> dict:
+    """Fetch video metadata without downloading"""
+    cookiefile = str(COOKIE_PATH) if COOKIE_PATH else None
+    dsid = YTDLP_DATA_SYNC_ID
+    for client in CLIENTS_TO_TRY:
+        try:
+            opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "noplaylist": True,
+                "extract_flat": False,
+                "extractor_args": {"youtube": {"player_client": [client]}},
+            }
+            if cookiefile:
+                opts["cookiefile"] = cookiefile
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return {
+                    "id": info.get("id"),
+                    "title": info.get("title", "Unknown"),
+                    "thumbnail": info.get("thumbnail") or f"https://i.ytimg.com/vi/{info.get('id')}/hqdefault.jpg",
+                    "duration": info.get("duration"),
+                    "duration_formatted": format_duration(info.get("duration")),
+                    "channel": info.get("channel") or info.get("uploader", "Unknown"),
+                    "view_count": info.get("view_count"),
+                    "url": url,
+                }
+        except Exception as e:
+            print(f"Client {client} failed for preview: {e}", flush=True)
+            continue
+    return None
+
+def fetch_playlist_info(url: str) -> dict:
+    """Fetch playlist metadata and all video info"""
+    cookiefile = str(COOKIE_PATH) if COOKIE_PATH else None
+    try:
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "extract_flat": "in_playlist",
+            "noplaylist": False,
+        }
+        if cookiefile:
+            opts["cookiefile"] = cookiefile
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if info.get("_type") == "playlist" or "entries" in info:
+                entries = info.get("entries", [])
+                videos = []
+                for entry in entries[:50]:  # Limit to 50 videos
+                    if entry:
+                        vid_id = entry.get("id") or entry.get("url", "").split("=")[-1]
+                        videos.append({
+                            "id": vid_id,
+                            "title": entry.get("title", "Unknown"),
+                            "thumbnail": f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg",
+                            "duration": entry.get("duration"),
+                            "duration_formatted": format_duration(entry.get("duration")),
+                            "url": f"https://www.youtube.com/watch?v={vid_id}",
+                        })
+                return {
+                    "is_playlist": True,
+                    "title": info.get("title", "Playlist"),
+                    "channel": info.get("channel") or info.get("uploader", "Unknown"),
+                    "video_count": len(videos),
+                    "videos": videos,
+                }
+            return None
+    except Exception as e:
+        print(f"Playlist fetch error: {e}", flush=True)
+        return None
+
+def is_playlist_url(url: str) -> bool:
+    return "list=" in url and "watch?v=" not in url.split("list=")[0][-20:]
+
 def download_task(job_id: str, url: str, quality: str):
     job_queue[job_id]["status"] = "downloading"
     cookiefile = str(COOKIE_PATH) if COOKIE_PATH else None
@@ -156,6 +244,36 @@ def home():
 @app.route("/health")
 def health():
     return jsonify({"ok": True, "status": "online"})
+
+@app.route("/preview", methods=["POST"])
+def preview():
+    url = request.form.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "URL required"}), 400
+    
+    # Check if it's a playlist URL
+    if "list=" in url:
+        playlist_info = fetch_playlist_info(url)
+        if playlist_info:
+            return jsonify(playlist_info)
+    
+    # Single video
+    video_info = fetch_video_info(url)
+    if video_info:
+        video_info["is_playlist"] = False
+        return jsonify(video_info)
+    
+    return jsonify({"error": "Could not fetch video info"}), 400
+
+@app.route("/playlist_info", methods=["POST"])
+def playlist_info():
+    url = request.form.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "URL required"}), 400
+    info = fetch_playlist_info(url)
+    if info:
+        return jsonify(info)
+    return jsonify({"error": "Could not fetch playlist info"}), 400
 
 @app.route("/enqueue", methods=["POST"])
 def enqueue():
@@ -471,6 +589,39 @@ HOME_HTML = r"""<!doctype html>
     .batch-item-download:hover { transform: scale(1.05); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
     .download-all-btn { margin-top: 20px; width: 100%; background: linear-gradient(135deg, var(--success), #059669); display: none; }
     .download-all-btn.active { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    /* Preview Card Styles */
+    .preview-card { display: none; margin-top: 24px; padding: 20px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); border-radius: 20px; animation: fadeIn 0.3s ease; }
+    .preview-card.active { display: block; }
+    .preview-card.loading { display: flex; align-items: center; justify-content: center; min-height: 100px; }
+    .preview-content { display: flex; gap: 20px; align-items: flex-start; }
+    .preview-thumbnail { width: 180px; height: 100px; border-radius: 12px; object-fit: cover; flex-shrink: 0; background: rgba(0,0,0,0.3); }
+    .preview-info { flex: 1; min-width: 0; }
+    .preview-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .preview-meta { display: flex; gap: 16px; flex-wrap: wrap; }
+    .preview-meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+    .preview-meta-item svg { width: 16px; height: 16px; opacity: 0.7; }
+    .preview-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 20px; font-size: 12px; font-weight: 600; color: var(--primary-light); margin-top: 12px; }
+    /* Playlist Preview Styles */
+    .playlist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .playlist-title { font-size: 18px; font-weight: 700; color: var(--text); }
+    .playlist-count { font-size: 14px; color: var(--text-muted); }
+    .playlist-videos { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 8px; }
+    .playlist-videos::-webkit-scrollbar { width: 6px; }
+    .playlist-videos::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
+    .playlist-videos::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
+    .playlist-video-item { display: flex; gap: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid var(--border); transition: var(--transition); }
+    .playlist-video-item:hover { background: rgba(0,0,0,0.3); border-color: var(--primary); }
+    .playlist-video-thumb { width: 120px; height: 68px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: rgba(0,0,0,0.3); }
+    .playlist-video-info { flex: 1; min-width: 0; }
+    .playlist-video-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .playlist-video-duration { font-size: 12px; color: var(--text-muted); }
+    .playlist-actions { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    @media (max-width: 768px) {
+      .preview-content { flex-direction: column; }
+      .preview-thumbnail { width: 100%; height: 180px; }
+      .playlist-video-item { flex-direction: column; }
+      .playlist-video-thumb { width: 100%; height: 120px; }
+    }
     .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 40px; }
     .feature-card { padding: 24px; background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%); border: 1px solid var(--border); border-radius: 20px; text-align: center; transition: var(--transition); }
     .feature-card:hover { transform: translateY(-5px); background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%); border-color: var(--primary); box-shadow: var(--glow-primary); }
@@ -568,6 +719,11 @@ https://www.youtube.com/watch?v=..."></textarea>
           </div>
         </div>
 
+        <!-- Video/Playlist Preview Card -->
+        <div class="preview-card" id="previewCard">
+          <div id="previewContent"></div>
+        </div>
+
         <div class="progress-wrapper" id="progressWrapper">
           <div class="progress-bar"><div class="progress-fill"></div></div>
         </div>
@@ -593,7 +749,7 @@ https://www.youtube.com/watch?v=..."></textarea>
       <div class="features-grid">
         <div class="feature-card"><div class="feature-icon">🎵</div><div class="feature-title">Premium Quality</div><div class="feature-desc">Crystal clear up to 320kbps MP3 audio</div></div>
         <div class="feature-card"><div class="feature-icon">⚡</div><div class="feature-title">Lightning Fast</div><div class="feature-desc">Optimized processing with smart caching</div></div>
-        <div class="feature-card"><div class="feature-icon">📦</div><div class="feature-title">Batch Mode</div><div class="feature-desc">Download up to 20 videos at once</div></div>
+        <div class="feature-card"><div class="feature-icon">📋</div><div class="feature-title">Playlist Support</div><div class="feature-desc">Download entire playlists at once</div></div>
         <div class="feature-card"><div class="feature-icon">🖼️</div><div class="feature-title">Album Art</div><div class="feature-desc">Thumbnails embedded automatically</div></div>
       </div>
     </div>
@@ -633,10 +789,14 @@ https://www.youtube.com/watch?v=..."></textarea>
     const toast = $('#toast');
     const healthBadge = $('#healthBadge');
     const sampleLink = $('#sampleLink');
+    const previewCard = $('#previewCard');
+    const previewContent = $('#previewContent');
 
     let currentMode = 'single';
     let currentBatchId = null;
     let hasBatchData = false;
+    let previewData = null;
+    let previewTimeout = null;
 
     // Create stars
     (function() {
@@ -682,6 +842,126 @@ https://www.youtube.com/watch?v=..."></textarea>
       singleUrl.value = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
       showToast('✨ Sample video loaded!');
       singleUrl.focus();
+      fetchPreview(singleUrl.value);
+    });
+
+    // Preview functionality
+    function formatViews(num) {
+      if (!num) return '';
+      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M views';
+      if (num >= 1000) return (num / 1000).toFixed(1) + 'K views';
+      return num + ' views';
+    }
+
+    function renderVideoPreview(data) {
+      return `
+        <div class="preview-content">
+          <img class="preview-thumbnail" src="${data.thumbnail}" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/180x100?text=No+Thumbnail'">
+          <div class="preview-info">
+            <div class="preview-title">${data.title}</div>
+            <div class="preview-meta">
+              <span class="preview-meta-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                ${data.duration_formatted || 'Unknown'}
+              </span>
+              <span class="preview-meta-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                ${data.channel}
+              </span>
+              ${data.view_count ? `<span class="preview-meta-item">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                ${formatViews(data.view_count)}
+              </span>` : ''}
+            </div>
+            <div class="preview-badge">✓ Ready to convert</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPlaylistPreview(data) {
+      const videosHtml = data.videos.slice(0, 20).map((v, i) => `
+        <div class="playlist-video-item">
+          <img class="playlist-video-thumb" src="${v.thumbnail}" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/120x68?text=No+Thumb'">
+          <div class="playlist-video-info">
+            <div class="playlist-video-title">${v.title}</div>
+            <div class="playlist-video-duration">${v.duration_formatted || 'Unknown duration'}</div>
+          </div>
+        </div>
+      `).join('');
+      
+      return `
+        <div class="playlist-header">
+          <div>
+            <div class="playlist-title">📋 ${data.title}</div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">${data.channel}</div>
+          </div>
+          <div class="playlist-count">${data.video_count} videos</div>
+        </div>
+        <div class="playlist-videos">${videosHtml}</div>
+        <div class="playlist-actions">
+          <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+            ${data.video_count > 20 ? `Showing first 20 of ${data.video_count} videos. ` : ''}Click "Convert Now" to download all as a batch.
+          </div>
+        </div>
+      `;
+    }
+
+    async function fetchPreview(url) {
+      if (!url || !isValidYT(url)) {
+        previewCard.classList.remove('active');
+        previewData = null;
+        return;
+      }
+      
+      // Show loading state
+      previewCard.classList.add('active', 'loading');
+      previewContent.innerHTML = '<div class="spinner"></div><span style="margin-left: 12px; color: var(--text-muted);">Loading preview...</span>';
+      
+      try {
+        const resp = await fetch('/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ url })
+        });
+        
+        if (!resp.ok) throw new Error('Preview failed');
+        const data = await resp.json();
+        previewData = data;
+        
+        previewCard.classList.remove('loading');
+        
+        if (data.is_playlist) {
+          previewContent.innerHTML = renderPlaylistPreview(data);
+        } else {
+          previewContent.innerHTML = renderVideoPreview(data);
+        }
+      } catch (e) {
+        previewCard.classList.remove('active', 'loading');
+        previewData = null;
+      }
+    }
+
+    // Debounced preview on input
+    singleUrl.addEventListener('input', e => {
+      clearTimeout(previewTimeout);
+      const url = e.target.value.trim();
+      if (url && isValidYT(url)) {
+        previewTimeout = setTimeout(() => fetchPreview(url), 800);
+      } else {
+        previewCard.classList.remove('active');
+        previewData = null;
+      }
+    });
+
+    // Also fetch preview on paste
+    singleUrl.addEventListener('paste', e => {
+      setTimeout(() => {
+        const url = singleUrl.value.trim();
+        if (url && isValidYT(url)) {
+          fetchPreview(url);
+        }
+      }, 100);
     });
 
     // Mode toggle - FIXED: preserves batch queue when switching back
@@ -701,8 +981,9 @@ https://www.youtube.com/watch?v=..."></textarea>
           batchQueue.classList.remove('active');
         }
         
-        // Hide single status when in batch mode
+        // Hide preview card and status when switching modes
         if (currentMode === 'batch') {
+          previewCard.classList.remove('active');
           statusDisplay.classList.remove('active');
           progressWrapper.classList.remove('active');
         }
@@ -843,7 +1124,16 @@ https://www.youtube.com/watch?v=..."></textarea>
         const quality = qualitySelect.value;
         if (!url) { showToast('⚠️ Please enter a URL'); resetBtn(); return; }
         if (!isValidYT(url)) { showToast('❌ Invalid YouTube URL'); resetBtn(); return; }
-        await handleSingle(url, quality);
+        
+        // Check if it's a playlist from preview data
+        if (previewData && previewData.is_playlist && previewData.videos) {
+          // Convert playlist to batch download
+          const playlistUrls = previewData.videos.map(v => v.url).join('\n');
+          showToast(`📋 Starting playlist download (${previewData.videos.length} videos)`);
+          await handleBatch(playlistUrls, quality);
+        } else {
+          await handleSingle(url, quality);
+        }
       } else {
         const urls = batchUrls.value.trim();
         const quality = batchQualitySelect.value;
