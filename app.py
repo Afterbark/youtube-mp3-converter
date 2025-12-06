@@ -836,8 +836,9 @@ HOME_HTML = r"""<!doctype html>
     .batch-info { flex: 1; min-width: 0; }
     .batch-item-title { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .batch-item-url { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-    .batch-item-download { padding: 10px 16px; background: var(--success); border: none; border-radius: 12px; color: white; font-size: 13px; font-weight: 600; cursor: pointer; opacity: 0; transition: var(--transition); font-family: inherit; }
-    .batch-item.done .batch-item-download { opacity: 1; }
+    .batch-item-download { padding: 10px 16px; background: var(--success); border: none; border-radius: 12px; color: white; font-size: 13px; font-weight: 600; cursor: pointer; opacity: 0; pointer-events: none; transition: var(--transition); font-family: inherit; }
+    .batch-item.done .batch-item-download { opacity: 1; pointer-events: auto; animation: popIn 0.3s ease; }
+    @keyframes popIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
     .batch-item-download:hover { transform: scale(1.05); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
     .download-all-btn { margin-top: 20px; width: 100%; background: linear-gradient(135deg, var(--success), #059669); display: none; }
     .download-all-btn.active { display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -1451,11 +1452,14 @@ https://www.youtube.com/watch?v=..."></textarea>
         const data = await resp.json();
         currentBatchId = data.batch_id;
         
+        // Track which jobs have been marked done to show notifications
+        const completedJobs = new Set();
+        
         data.jobs.forEach(job => {
           const item = document.createElement('div');
           item.className = 'batch-item';
           item.id = 'job-' + job.job_id;
-          item.innerHTML = '<div class="batch-status-icon queued"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg></div><div class="batch-info"><div class="batch-item-title">Waiting...</div><div class="batch-item-url">' + job.url + '</div></div><button type="button" class="batch-item-download" onclick="window.location.href=\'/download_job/' + job.job_id + '\'">Download</button>';
+          item.innerHTML = '<div class="batch-status-icon queued"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg></div><div class="batch-info"><div class="batch-item-title">Waiting...</div><div class="batch-item-url">' + job.url + '</div></div><button type="button" class="batch-item-download" onclick="window.location.href=\'/download_job/' + job.job_id + '\'">⬇ Download</button>';
           batchList.appendChild(item);
         });
         
@@ -1469,6 +1473,15 @@ https://www.youtube.com/watch?v=..."></textarea>
           st.jobs.forEach(job => {
             const item = $('#job-' + job.job_id);
             if (!item) return;
+            
+            // Check if this job just completed
+            if (job.status === 'done' && !completedJobs.has(job.job_id)) {
+              completedJobs.add(job.job_id);
+              showToast(`✅ Ready: ${job.title || 'Track'} - Click to download!`);
+              // Scroll the completed item into view
+              item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            
             item.className = 'batch-item ' + job.status;
             item.querySelector('.batch-item-title').textContent = job.title || 'Processing...';
             const icon = item.querySelector('.batch-status-icon');
@@ -1480,7 +1493,7 @@ https://www.youtube.com/watch?v=..."></textarea>
           
           if (st.status === 'done') {
             clearInterval(poll);
-            showToast('✅ Batch complete! ' + st.completed + '/' + st.total + ' successful');
+            showToast('🎉 All done! ' + st.completed + '/' + st.total + ' successful');
             resetBtn();
             if (st.completed > 0) downloadAll.classList.add('active');
           }
@@ -1644,12 +1657,15 @@ https://www.youtube.com/watch?v=..."></textarea>
           const item = document.createElement('div');
           item.className = 'batch-item';
           item.id = 'job-' + job.job_id;
-          item.innerHTML = '<div class="batch-status-icon queued"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg></div><div class="batch-info"><div class="batch-item-title">' + (job.title || 'Waiting...') + '</div><div class="batch-item-url" style="color: #1ed760;">via YouTube search</div></div><button type="button" class="batch-item-download" onclick="window.location.href=\'/download_job/' + job.job_id + '\'">Download</button>';
+          item.innerHTML = '<div class="batch-status-icon queued"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg></div><div class="batch-info"><div class="batch-item-title">' + (job.title || 'Waiting...') + '</div><div class="batch-item-url" style="color: #1ed760;">via YouTube search</div></div><button type="button" class="batch-item-download" onclick="window.location.href=\'/download_job/' + job.job_id + '\'">⬇ Download</button>';
           batchList.appendChild(item);
         });
         
         batchProgress.textContent = '0 / ' + data.total;
         showToast(`✅ Found ${data.total} tracks on YouTube. Starting download...`);
+        
+        // Track completed jobs for notifications
+        const completedJobs = new Set();
         
         const poll = setInterval(async () => {
           const sr = await fetch('/batch_status/' + currentBatchId);
@@ -1659,6 +1675,14 @@ https://www.youtube.com/watch?v=..."></textarea>
           st.jobs.forEach(job => {
             const item = $('#job-' + job.job_id);
             if (!item) return;
+            
+            // Check if this job just completed
+            if (job.status === 'done' && !completedJobs.has(job.job_id)) {
+              completedJobs.add(job.job_id);
+              showToast(`✅ Ready: ${job.title || 'Track'} - Click to download!`);
+              item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            
             item.className = 'batch-item ' + job.status;
             item.querySelector('.batch-item-title').textContent = job.title || 'Processing...';
             const icon = item.querySelector('.batch-status-icon');
@@ -1670,7 +1694,7 @@ https://www.youtube.com/watch?v=..."></textarea>
           
           if (st.status === 'done') {
             clearInterval(poll);
-            showToast('✅ Spotify download complete! ' + st.completed + '/' + st.total + ' successful');
+            showToast('🎉 Spotify download complete! ' + st.completed + '/' + st.total + ' successful');
             resetBtn();
             if (st.completed > 0) downloadAll.classList.add('active');
           }
@@ -1722,6 +1746,3 @@ https://www.youtube.com/watch?v=..."></textarea>
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
-    
-    
-    
