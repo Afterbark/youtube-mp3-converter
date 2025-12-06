@@ -15,6 +15,15 @@ from flask_cors import CORS
 import yt_dlp
 from yt_dlp.utils import DownloadError, ExtractorError
 
+# Spotify support (optional)
+try:
+    import spotipy
+    from spotipy.oauth2 import SpotifyClientCredentials
+    SPOTIPY_AVAILABLE = True
+except ImportError:
+    SPOTIPY_AVAILABLE = False
+    print("⚠ spotipy not installed - Spotify features disabled", flush=True)
+
 app = Flask(__name__)
 CORS(app)
 
@@ -37,6 +46,22 @@ OUT_DEFAULT = "yt_%(id)s.%(ext)s"
 SAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 CLIENTS_TO_TRY = ["web", "mweb", "mediaconnect", "tv_embedded"]
+
+# Spotify configuration
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+spotify_client = None
+
+if SPOTIPY_AVAILABLE and SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
+    try:
+        auth_manager = SpotifyClientCredentials(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET
+        )
+        spotify_client = spotipy.Spotify(auth_manager=auth_manager)
+        print("✓ Spotify client initialized", flush=True)
+    except Exception as e:
+        print(f"✗ Failed to init Spotify: {e}", flush=True)
 
 job_queue = {}
 batch_queue = {}
@@ -188,6 +213,146 @@ def fetch_playlist_info(url: str) -> dict:
 def is_playlist_url(url: str) -> bool:
     return "list=" in url and "watch?v=" not in url.split("list=")[0][-20:]
 
+# ---------- Spotify Functions ----------
+def parse_spotify_url(url: str) -> tuple:
+    """Parse Spotify URL and return (type, id)"""
+    patterns = [
+        (r'spotify\.com/playlist/([a-zA-Z0-9]+)', 'playlist'),
+        (r'spotify\.com/album/([a-zA-Z0-9]+)', 'album'),
+        (r'spotify\.com/track/([a-zA-Z0-9]+)', 'track'),
+    ]
+    for pattern, url_type in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return (url_type, match.group(1))
+    return (None, None)
+
+def get_spotify_playlist(playlist_id: str) -> dict:
+    """Fetch Spotify playlist tracks"""
+    if not spotify_client:
+        return None
+    try:
+        results = spotify_client.playlist(playlist_id)
+        tracks = []
+        items = results.get('tracks', {}).get('items', [])
+        
+        # Handle pagination for large playlists
+        while len(tracks) < 50 and items:
+            for item in items:
+                if len(tracks) >= 50:
+                    break
+                track = item.get('track')
+                if track and track.get('name'):
+                    artists = ", ".join([a['name'] for a in track.get('artists', [])])
+                    tracks.append({
+                        'title': track['name'],
+                        'artist': artists,
+                        'album': track.get('album', {}).get('name', ''),
+                        'duration_ms': track.get('duration_ms', 0),
+                        'duration_formatted': format_duration(track.get('duration_ms', 0) // 1000),
+                        'thumbnail': track.get('album', {}).get('images', [{}])[0].get('url', ''),
+                        'search_query': f"{track['name']} {artists}",
+                    })
+            
+            # Get next page if available
+            next_url = results.get('tracks', {}).get('next')
+            if next_url and len(tracks) < 50:
+                results['tracks'] = spotify_client.next(results['tracks'])
+                items = results.get('tracks', {}).get('items', [])
+            else:
+                break
+        
+        return {
+            'is_spotify': True,
+            'type': 'playlist',
+            'title': results.get('name', 'Playlist'),
+            'owner': results.get('owner', {}).get('display_name', 'Unknown'),
+            'thumbnail': results.get('images', [{}])[0].get('url', ''),
+            'total_tracks': results.get('tracks', {}).get('total', len(tracks)),
+            'tracks': tracks,
+        }
+    except Exception as e:
+        print(f"Spotify playlist error: {e}", flush=True)
+        return None
+
+def get_spotify_album(album_id: str) -> dict:
+    """Fetch Spotify album tracks"""
+    if not spotify_client:
+        return None
+    try:
+        results = spotify_client.album(album_id)
+        tracks = []
+        for item in results.get('tracks', {}).get('items', [])[:50]:
+            artists = ", ".join([a['name'] for a in item.get('artists', [])])
+            tracks.append({
+                'title': item['name'],
+                'artist': artists,
+                'album': results.get('name', ''),
+                'duration_ms': item.get('duration_ms', 0),
+                'duration_formatted': format_duration(item.get('duration_ms', 0) // 1000),
+                'thumbnail': results.get('images', [{}])[0].get('url', ''),
+                'search_query': f"{item['name']} {artists}",
+            })
+        
+        return {
+            'is_spotify': True,
+            'type': 'album',
+            'title': results.get('name', 'Album'),
+            'owner': ", ".join([a['name'] for a in results.get('artists', [])]),
+            'thumbnail': results.get('images', [{}])[0].get('url', ''),
+            'total_tracks': results.get('total_tracks', len(tracks)),
+            'tracks': tracks,
+        }
+    except Exception as e:
+        print(f"Spotify album error: {e}", flush=True)
+        return None
+
+def get_spotify_track(track_id: str) -> dict:
+    """Fetch single Spotify track"""
+    if not spotify_client:
+        return None
+    try:
+        track = spotify_client.track(track_id)
+        artists = ", ".join([a['name'] for a in track.get('artists', [])])
+        return {
+            'is_spotify': True,
+            'type': 'track',
+            'title': track.get('name', 'Track'),
+            'owner': artists,
+            'thumbnail': track.get('album', {}).get('images', [{}])[0].get('url', ''),
+            'total_tracks': 1,
+            'tracks': [{
+                'title': track['name'],
+                'artist': artists,
+                'album': track.get('album', {}).get('name', ''),
+                'duration_ms': track.get('duration_ms', 0),
+                'duration_formatted': format_duration(track.get('duration_ms', 0) // 1000),
+                'thumbnail': track.get('album', {}).get('images', [{}])[0].get('url', ''),
+                'search_query': f"{track['name']} {artists}",
+            }],
+        }
+    except Exception as e:
+        print(f"Spotify track error: {e}", flush=True)
+        return None
+
+def search_youtube_for_track(search_query: str) -> str:
+    """Search YouTube and return video URL"""
+    try:
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": True,
+            "default_search": "ytsearch1",
+        }
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            result = ydl.extract_info(f"ytsearch1:{search_query}", download=False)
+            if result and 'entries' in result and result['entries']:
+                video = result['entries'][0]
+                return f"https://www.youtube.com/watch?v={video['id']}"
+    except Exception as e:
+        print(f"YouTube search error for '{search_query}': {e}", flush=True)
+    return None
+
 def download_task(job_id: str, url: str, quality: str):
     job_queue[job_id]["status"] = "downloading"
     cookiefile = str(COOKIE_PATH) if COOKIE_PATH else None
@@ -274,6 +439,93 @@ def playlist_info():
     if info:
         return jsonify(info)
     return jsonify({"error": "Could not fetch playlist info"}), 400
+
+@app.route("/spotify_status", methods=["GET"])
+def spotify_status():
+    """Check if Spotify is configured"""
+    return jsonify({
+        "available": spotify_client is not None,
+        "message": "Spotify ready" if spotify_client else "Spotify not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to environment."
+    })
+
+@app.route("/spotify_preview", methods=["POST"])
+def spotify_preview():
+    """Fetch Spotify playlist/album/track info"""
+    url = request.form.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "URL required"}), 400
+    
+    if not spotify_client:
+        return jsonify({"error": "Spotify not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET."}), 400
+    
+    url_type, spotify_id = parse_spotify_url(url)
+    if not url_type:
+        return jsonify({"error": "Invalid Spotify URL"}), 400
+    
+    if url_type == 'playlist':
+        info = get_spotify_playlist(spotify_id)
+    elif url_type == 'album':
+        info = get_spotify_album(spotify_id)
+    elif url_type == 'track':
+        info = get_spotify_track(spotify_id)
+    else:
+        return jsonify({"error": "Unsupported Spotify URL type"}), 400
+    
+    if info:
+        return jsonify(info)
+    return jsonify({"error": "Could not fetch Spotify info"}), 400
+
+@app.route("/spotify_download", methods=["POST"])
+def spotify_download():
+    """Convert Spotify tracks to YouTube and start batch download"""
+    tracks_json = request.form.get("tracks", "").strip()
+    quality = request.form.get("quality", "192").strip()
+    
+    if not tracks_json:
+        return jsonify({"error": "Tracks required"}), 400
+    if quality not in ["128", "192", "256", "320"]:
+        quality = "192"
+    
+    try:
+        tracks = json.loads(tracks_json)
+    except:
+        return jsonify({"error": "Invalid tracks data"}), 400
+    
+    if len(tracks) > 50:
+        tracks = tracks[:50]
+    
+    # Search YouTube for each track
+    youtube_urls = []
+    track_titles = []
+    for track in tracks:
+        search_query = track.get('search_query', f"{track.get('title', '')} {track.get('artist', '')}")
+        yt_url = search_youtube_for_track(search_query)
+        if yt_url:
+            youtube_urls.append(yt_url)
+            track_titles.append(f"{track.get('title', 'Unknown')} - {track.get('artist', 'Unknown')}")
+    
+    if not youtube_urls:
+        return jsonify({"error": "No YouTube matches found"}), 400
+    
+    # Create batch job
+    batch_id = str(uuid.uuid4())
+    batch_queue[batch_id] = {
+        "status": "processing", "total": len(youtube_urls), "completed": 0, "failed": 0, 
+        "current_index": 0, "quality": quality, "created_at": datetime.now().isoformat(),
+        "jobs": [{"job_id": str(uuid.uuid4()), "url": url, "status": "queued", "title": title, "error": None, "file_path": None} 
+                 for url, title in zip(youtube_urls, track_titles)]
+    }
+    
+    thread = threading.Thread(target=batch_download_task, args=(batch_id, youtube_urls, quality))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({
+        "batch_id": batch_id, 
+        "total": len(youtube_urls), 
+        "status": "processing",
+        "jobs": [{"job_id": j["job_id"], "url": j["url"], "status": "queued", "title": j["title"]} for j in batch_queue[batch_id]["jobs"]]
+    })
 
 @app.route("/enqueue", methods=["POST"])
 def enqueue():
@@ -589,6 +841,29 @@ HOME_HTML = r"""<!doctype html>
     .batch-item-download:hover { transform: scale(1.05); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
     .download-all-btn { margin-top: 20px; width: 100%; background: linear-gradient(135deg, var(--success), #059669); display: none; }
     .download-all-btn.active { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    /* Platform Toggle (YouTube/Spotify) */
+    .platform-toggle { display: flex; gap: 12px; margin-bottom: 24px; }
+    .platform-btn { flex: 1; padding: 16px 20px; background: rgba(0, 0, 0, 0.3); border: 2px solid var(--border); border-radius: 16px; color: var(--text-muted); font-size: 15px; font-weight: 600; cursor: pointer; transition: var(--transition); display: flex; align-items: center; justify-content: center; gap: 10px; font-family: inherit; }
+    .platform-btn:hover { border-color: var(--primary-light); color: var(--text); }
+    .platform-btn.active { background: rgba(99, 102, 241, 0.15); border-color: var(--primary); color: var(--primary-light); }
+    .platform-btn.spotify.active { background: rgba(30, 215, 96, 0.15); border-color: #1ed760; color: #1ed760; }
+    .platform-btn svg { width: 22px; height: 22px; }
+    .spotify-section { display: none; }
+    .platform-spotify .youtube-section { display: none; }
+    .platform-spotify .spotify-section { display: block; }
+    .spotify-badge { background: rgba(30, 215, 96, 0.15); border-color: rgba(30, 215, 96, 0.3); color: #1ed760; }
+    .spotify-not-configured { padding: 32px; text-align: center; background: rgba(0,0,0,0.2); border-radius: 16px; border: 1px dashed var(--border); }
+    .spotify-not-configured h3 { color: var(--text); margin-bottom: 12px; font-size: 18px; }
+    .spotify-not-configured p { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+    .spotify-not-configured code { background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px; font-size: 13px; }
+    /* Spotify Track List */
+    .spotify-tracks { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+    .spotify-track { display: flex; gap: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid var(--border); }
+    .spotify-track-thumb { width: 50px; height: 50px; border-radius: 6px; object-fit: cover; }
+    .spotify-track-info { flex: 1; min-width: 0; }
+    .spotify-track-title { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .spotify-track-artist { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .spotify-track-duration { font-size: 12px; color: var(--text-muted); margin-left: auto; }
     /* Preview Card Styles */
     .preview-card { display: none; margin-top: 24px; padding: 20px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); border-radius: 20px; animation: fadeIn 0.3s ease; }
     .preview-card.active { display: block; }
@@ -669,62 +944,76 @@ HOME_HTML = r"""<!doctype html>
         </div>
       </div>
       <h1>YouTube → MP3 Converter</h1>
-      <p class="subtitle">Transform any YouTube video into premium quality audio instantly</p>
+      <p class="subtitle">Transform any YouTube or Spotify playlist into premium quality audio</p>
     </div>
 
     <div class="card" id="mainCard">
-      <div class="mode-toggle">
-        <button type="button" class="mode-btn active" data-mode="single">Single URL</button>
-        <button type="button" class="mode-btn" data-mode="batch">Batch Mode (up to 50)</button>
+      <!-- Platform Toggle -->
+      <div class="platform-toggle">
+        <button type="button" class="platform-btn youtube active" data-platform="youtube">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+          YouTube
+        </button>
+        <button type="button" class="platform-btn spotify" data-platform="spotify">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+          Spotify
+        </button>
       </div>
 
-      <form id="form">
-        <div class="input-group single-input">
-          <div class="input-wrapper">
-            <div class="input-field">
-              <input id="singleUrl" type="url" placeholder="Paste your YouTube URL here..." autocomplete="off" />
-              <svg class="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
-            </div>
-            <select class="quality-selector" id="qualitySelect">
-              <option value="128">128 kbps</option>
-              <option value="192" selected>192 kbps</option>
-              <option value="256">256 kbps</option>
-              <option value="320">320 kbps</option>
-            </select>
-            <button class="btn-convert" id="convertBtn" type="submit"><span id="btnText">Convert Now</span></button>
-          </div>
+      <!-- YouTube Section -->
+      <div class="youtube-section">
+        <div class="mode-toggle">
+          <button type="button" class="mode-btn active" data-mode="single">Single URL</button>
+          <button type="button" class="mode-btn" data-mode="batch">Batch Mode (up to 50)</button>
         </div>
 
-        <div class="input-group batch-input">
-          <textarea id="batchUrls" placeholder="Paste YouTube URLs here (one per line, max 50)...
+        <form id="form">
+          <div class="input-group single-input">
+            <div class="input-wrapper">
+              <div class="input-field">
+                <input id="singleUrl" type="url" placeholder="Paste your YouTube URL here..." autocomplete="off" />
+                <svg class="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+              </div>
+              <select class="quality-selector" id="qualitySelect">
+                <option value="128">128 kbps</option>
+                <option value="192" selected>192 kbps</option>
+                <option value="256">256 kbps</option>
+                <option value="320">320 kbps</option>
+              </select>
+              <button class="btn-convert" id="convertBtn" type="submit"><span id="btnText">Convert Now</span></button>
+            </div>
+          </div>
+
+          <div class="input-group batch-input">
+            <textarea id="batchUrls" placeholder="Paste YouTube URLs here (one per line, max 50)...
 
 https://www.youtube.com/watch?v=abc123
 https://youtu.be/xyz789
 https://www.youtube.com/watch?v=..."></textarea>
-          <div class="input-wrapper" style="margin-top: 16px;">
-            <select class="quality-selector" id="batchQualitySelect">
-              <option value="128">128 kbps</option>
-              <option value="192" selected>192 kbps</option>
-              <option value="256">256 kbps</option>
-              <option value="320">320 kbps</option>
-            </select>
-            <button class="btn-convert" type="submit"><span>Start Batch Download</span></button>
+            <div class="input-wrapper" style="margin-top: 16px;">
+              <select class="quality-selector" id="batchQualitySelect">
+                <option value="128">128 kbps</option>
+                <option value="192" selected>192 kbps</option>
+                <option value="256">256 kbps</option>
+                <option value="320">320 kbps</option>
+              </select>
+              <button class="btn-convert" type="submit"><span>Start Batch Download</span></button>
+            </div>
           </div>
-        </div>
 
-        <div class="quick-actions">
-          <div class="action-group">
-            <a href="#" id="sampleLink" class="action-link">✨ Try Sample</a>
-            <span class="health-badge loading" id="healthBadge"><span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span><span>Checking...</span></span>
+          <div class="quick-actions">
+            <div class="action-group">
+              <a href="#" id="sampleLink" class="action-link">✨ Try Sample</a>
+              <span class="health-badge loading" id="healthBadge"><span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span><span>Checking...</span></span>
+            </div>
           </div>
-        </div>
 
-        <!-- Video/Playlist Preview Card -->
-        <div class="preview-card" id="previewCard">
-          <div id="previewContent"></div>
-        </div>
+          <!-- Video/Playlist Preview Card -->
+          <div class="preview-card" id="previewCard">
+            <div id="previewContent"></div>
+          </div>
 
-        <div class="progress-wrapper" id="progressWrapper">
+          <div class="progress-wrapper" id="progressWrapper">
           <div class="progress-bar"><div class="progress-fill"></div></div>
         </div>
 
@@ -733,6 +1022,47 @@ https://www.youtube.com/watch?v=..."></textarea>
           <span class="status-text" id="statusText">Ready to convert your audio</span>
         </div>
       </form>
+      </div><!-- End YouTube Section -->
+
+      <!-- Spotify Section -->
+      <div class="spotify-section">
+        <div id="spotifyNotConfigured" class="spotify-not-configured" style="display:none;">
+          <h3>🔧 Spotify Setup Required</h3>
+          <p>To use Spotify features, add these environment variables:</p>
+          <p style="margin-top: 12px;"><code>SPOTIFY_CLIENT_ID</code> and <code>SPOTIFY_CLIENT_SECRET</code></p>
+          <p style="margin-top: 12px;">Get them free at <a href="https://developer.spotify.com/dashboard" target="_blank" style="color: #1ed760;">developer.spotify.com</a></p>
+        </div>
+        
+        <div id="spotifyConfigured">
+          <div class="input-group">
+            <div class="input-wrapper">
+              <div class="input-field">
+                <input id="spotifyUrl" type="url" placeholder="Paste Spotify playlist, album, or track URL..." autocomplete="off" />
+                <svg class="input-icon" fill="currentColor" viewBox="0 0 24 24" style="color: #1ed760;"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+              </div>
+              <select class="quality-selector" id="spotifyQualitySelect">
+                <option value="128">128 kbps</option>
+                <option value="192" selected>192 kbps</option>
+                <option value="256">256 kbps</option>
+                <option value="320">320 kbps</option>
+              </select>
+              <button type="button" class="btn-convert" id="spotifyConvertBtn" style="background: linear-gradient(135deg, #1ed760, #1db954);"><span id="spotifyBtnText">Convert Now</span></button>
+            </div>
+          </div>
+
+          <div class="quick-actions">
+            <div class="action-group">
+              <a href="#" id="spotifySampleLink" class="action-link">✨ Try Sample Playlist</a>
+              <span class="health-badge spotify-badge" id="spotifyBadge"><span class="health-dot" style="background:#1ed760;"></span><span>Spotify Ready</span></span>
+            </div>
+          </div>
+
+          <!-- Spotify Preview Card -->
+          <div class="preview-card" id="spotifyPreviewCard">
+            <div id="spotifyPreviewContent"></div>
+          </div>
+        </div>
+      </div><!-- End Spotify Section -->
 
       <div class="batch-queue" id="batchQueue">
         <div class="batch-header">
@@ -791,12 +1121,26 @@ https://www.youtube.com/watch?v=..."></textarea>
     const sampleLink = $('#sampleLink');
     const previewCard = $('#previewCard');
     const previewContent = $('#previewContent');
+    
+    // Spotify elements
+    const spotifyUrl = $('#spotifyUrl');
+    const spotifyQualitySelect = $('#spotifyQualitySelect');
+    const spotifyConvertBtn = $('#spotifyConvertBtn');
+    const spotifyBtnText = $('#spotifyBtnText');
+    const spotifyPreviewCard = $('#spotifyPreviewCard');
+    const spotifyPreviewContent = $('#spotifyPreviewContent');
+    const spotifyNotConfigured = $('#spotifyNotConfigured');
+    const spotifyConfigured = $('#spotifyConfigured');
+    const spotifySampleLink = $('#spotifySampleLink');
+    const spotifyBadge = $('#spotifyBadge');
 
     let currentMode = 'single';
+    let currentPlatform = 'youtube';
     let currentBatchId = null;
     let hasBatchData = false;
     let previewData = null;
     let previewTimeout = null;
+    let spotifyPreviewData = null;
 
     // Create stars
     (function() {
@@ -836,6 +1180,40 @@ https://www.youtube.com/watch?v=..."></textarea>
       healthBadge.innerHTML = '<span>Offline</span>';
     });
 
+    // Spotify status check
+    fetch('/spotify_status').then(r => r.json()).then(d => {
+      if (d.available) {
+        spotifyNotConfigured.style.display = 'none';
+        spotifyConfigured.style.display = 'block';
+      } else {
+        spotifyNotConfigured.style.display = 'block';
+        spotifyConfigured.style.display = 'none';
+      }
+    }).catch(() => {
+      spotifyNotConfigured.style.display = 'block';
+      spotifyConfigured.style.display = 'none';
+    });
+
+    // Platform toggle (YouTube/Spotify)
+    $$('.platform-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        $$('.platform-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentPlatform = btn.dataset.platform;
+        if (currentPlatform === 'spotify') {
+          mainCard.classList.add('platform-spotify');
+        } else {
+          mainCard.classList.remove('platform-spotify');
+        }
+        // Hide previews and queues when switching
+        previewCard.classList.remove('active');
+        spotifyPreviewCard.classList.remove('active');
+        statusDisplay.classList.remove('active');
+        progressWrapper.classList.remove('active');
+      });
+    });
+
     // Sample link
     sampleLink.addEventListener('click', e => {
       e.preventDefault();
@@ -843,6 +1221,15 @@ https://www.youtube.com/watch?v=..."></textarea>
       showToast('✨ Sample video loaded!');
       singleUrl.focus();
       fetchPreview(singleUrl.value);
+    });
+
+    // Spotify sample link
+    spotifySampleLink.addEventListener('click', e => {
+      e.preventDefault();
+      spotifyUrl.value = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
+      showToast('✨ Sample Spotify playlist loaded!');
+      spotifyUrl.focus();
+      fetchSpotifyPreview(spotifyUrl.value);
     });
 
     // Preview functionality
@@ -1107,11 +1494,191 @@ https://www.youtube.com/watch?v=..."></textarea>
     function resetBtn() {
       convertBtn.disabled = false;
       btnText.textContent = 'Convert Now';
+      spotifyConvertBtn.disabled = false;
+      spotifyBtnText.textContent = 'Convert Now';
     }
 
     downloadAll.addEventListener('click', e => {
       e.preventDefault();
       if (currentBatchId) window.location.href = '/batch_download/' + currentBatchId;
+    });
+
+    // Spotify Preview Functions
+    function isValidSpotify(url) {
+      return /^(https?:\/\/)?(open\.)?spotify\.com\/(playlist|album|track)\/[a-zA-Z0-9]+/i.test(url);
+    }
+
+    function renderSpotifyPreview(data) {
+      const tracksHtml = data.tracks.slice(0, 50).map((t, i) => `
+        <div class="spotify-track">
+          <img class="spotify-track-thumb" src="${t.thumbnail || 'https://via.placeholder.com/50?text=♪'}" alt="Album art" onerror="this.src='https://via.placeholder.com/50?text=♪'">
+          <div class="spotify-track-info">
+            <div class="spotify-track-title">${t.title}</div>
+            <div class="spotify-track-artist">${t.artist}</div>
+          </div>
+          <span class="spotify-track-duration">${t.duration_formatted || ''}</span>
+        </div>
+      `).join('');
+      
+      const typeIcon = data.type === 'playlist' ? '📋' : data.type === 'album' ? '💿' : '🎵';
+      
+      return `
+        <div class="playlist-header">
+          <div style="display: flex; align-items: center; gap: 16px;">
+            ${data.thumbnail ? `<img src="${data.thumbnail}" style="width: 60px; height: 60px; border-radius: 8px; object-fit: cover;">` : ''}
+            <div>
+              <div class="playlist-title">${typeIcon} ${data.title}</div>
+              <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">${data.owner}</div>
+            </div>
+          </div>
+          <div class="playlist-count">${data.total_tracks} tracks</div>
+        </div>
+        <div class="spotify-tracks">${tracksHtml}</div>
+        <div class="playlist-actions">
+          <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+            ${data.total_tracks > 50 ? `⚠️ Will download first 50 of ${data.total_tracks} tracks. ` : ''}
+            Tracks will be searched on YouTube and downloaded as MP3.
+          </div>
+        </div>
+      `;
+    }
+
+    async function fetchSpotifyPreview(url) {
+      if (!url || !isValidSpotify(url)) {
+        spotifyPreviewCard.classList.remove('active');
+        spotifyPreviewData = null;
+        return;
+      }
+      
+      spotifyPreviewCard.classList.add('active', 'loading');
+      spotifyPreviewContent.innerHTML = '<div class="spinner"></div><span style="margin-left: 12px; color: var(--text-muted);">Loading from Spotify...</span>';
+      
+      try {
+        const resp = await fetch('/spotify_preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ url })
+        });
+        
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.error || 'Failed');
+        }
+        
+        const data = await resp.json();
+        spotifyPreviewData = data;
+        spotifyPreviewCard.classList.remove('loading');
+        spotifyPreviewContent.innerHTML = renderSpotifyPreview(data);
+      } catch (e) {
+        spotifyPreviewCard.classList.remove('loading');
+        spotifyPreviewContent.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--error);">❌ ${e.message || 'Failed to load Spotify data'}</div>`;
+        spotifyPreviewData = null;
+      }
+    }
+
+    // Spotify input handlers
+    let spotifyTimeout = null;
+    spotifyUrl.addEventListener('input', e => {
+      clearTimeout(spotifyTimeout);
+      const url = e.target.value.trim();
+      if (url && isValidSpotify(url)) {
+        spotifyTimeout = setTimeout(() => fetchSpotifyPreview(url), 800);
+      } else {
+        spotifyPreviewCard.classList.remove('active');
+        spotifyPreviewData = null;
+      }
+    });
+
+    spotifyUrl.addEventListener('paste', e => {
+      setTimeout(() => {
+        const url = spotifyUrl.value.trim();
+        if (url && isValidSpotify(url)) {
+          fetchSpotifyPreview(url);
+        }
+      }, 100);
+    });
+
+    // Spotify convert button
+    spotifyConvertBtn.addEventListener('click', async e => {
+      e.preventDefault();
+      
+      if (!spotifyPreviewData || !spotifyPreviewData.tracks || spotifyPreviewData.tracks.length === 0) {
+        showToast('⚠️ Please enter a valid Spotify URL first');
+        return;
+      }
+      
+      spotifyConvertBtn.disabled = true;
+      spotifyBtnText.textContent = 'Processing...';
+      
+      const quality = spotifyQualitySelect.value;
+      const tracksToDownload = spotifyPreviewData.tracks.slice(0, 50);
+      
+      showToast(`🎵 Searching YouTube for ${tracksToDownload.length} tracks...`);
+      
+      hasBatchData = true;
+      batchQueue.classList.add('active');
+      batchList.innerHTML = '';
+      downloadAll.classList.remove('active');
+      
+      try {
+        const resp = await fetch('/spotify_download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ 
+            tracks: JSON.stringify(tracksToDownload), 
+            quality 
+          })
+        });
+        
+        if (!resp.ok) {
+          const err = await resp.json();
+          showToast('❌ ' + (err.error || 'Failed'));
+          resetBtn();
+          return;
+        }
+        
+        const data = await resp.json();
+        currentBatchId = data.batch_id;
+        
+        data.jobs.forEach(job => {
+          const item = document.createElement('div');
+          item.className = 'batch-item';
+          item.id = 'job-' + job.job_id;
+          item.innerHTML = '<div class="batch-status-icon queued"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg></div><div class="batch-info"><div class="batch-item-title">' + (job.title || 'Waiting...') + '</div><div class="batch-item-url" style="color: #1ed760;">via YouTube search</div></div><button type="button" class="batch-item-download" onclick="window.location.href=\'/download_job/' + job.job_id + '\'">Download</button>';
+          batchList.appendChild(item);
+        });
+        
+        batchProgress.textContent = '0 / ' + data.total;
+        showToast(`✅ Found ${data.total} tracks on YouTube. Starting download...`);
+        
+        const poll = setInterval(async () => {
+          const sr = await fetch('/batch_status/' + currentBatchId);
+          const st = await sr.json();
+          batchProgress.textContent = st.completed + ' / ' + st.total;
+          
+          st.jobs.forEach(job => {
+            const item = $('#job-' + job.job_id);
+            if (!item) return;
+            item.className = 'batch-item ' + job.status;
+            item.querySelector('.batch-item-title').textContent = job.title || 'Processing...';
+            const icon = item.querySelector('.batch-status-icon');
+            icon.className = 'batch-status-icon ' + job.status;
+            if (job.status === 'done') icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+            else if (job.status === 'error') icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+            else if (job.status === 'downloading') icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>';
+          });
+          
+          if (st.status === 'done') {
+            clearInterval(poll);
+            showToast('✅ Spotify download complete! ' + st.completed + '/' + st.total + ' successful');
+            resetBtn();
+            if (st.completed > 0) downloadAll.classList.add('active');
+          }
+        }, 2000);
+      } catch (e) {
+        showToast('❌ Error starting Spotify download');
+        resetBtn();
+      }
     });
 
     form.addEventListener('submit', async e => {
