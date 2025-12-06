@@ -305,8 +305,8 @@ def batch_enqueue():
     urls = [line.strip() for line in urls_raw.replace(",", "\n").split("\n") if line.strip() and ("youtube.com" in line or "youtu.be" in line)]
     if not urls:
         return jsonify({"error": "No valid YouTube URLs found"}), 400
-    if len(urls) > 20:
-        return jsonify({"error": "Maximum 20 URLs per batch"}), 400
+    if len(urls) > 50:
+        return jsonify({"error": "Maximum 50 URLs per batch"}), 400
     batch_id = str(uuid.uuid4())
     batch_queue[batch_id] = {
         "status": "processing", "total": len(urls), "completed": 0, "failed": 0, "current_index": 0, "quality": quality, "created_at": datetime.now().isoformat(),
@@ -675,7 +675,7 @@ HOME_HTML = r"""<!doctype html>
     <div class="card" id="mainCard">
       <div class="mode-toggle">
         <button type="button" class="mode-btn active" data-mode="single">Single URL</button>
-        <button type="button" class="mode-btn" data-mode="batch">Batch Mode (up to 20)</button>
+        <button type="button" class="mode-btn" data-mode="batch">Batch Mode (up to 50)</button>
       </div>
 
       <form id="form">
@@ -696,7 +696,7 @@ HOME_HTML = r"""<!doctype html>
         </div>
 
         <div class="input-group batch-input">
-          <textarea id="batchUrls" placeholder="Paste YouTube URLs here (one per line, max 20)...
+          <textarea id="batchUrls" placeholder="Paste YouTube URLs here (one per line, max 50)...
 
 https://www.youtube.com/watch?v=abc123
 https://youtu.be/xyz789
@@ -880,7 +880,7 @@ https://www.youtube.com/watch?v=..."></textarea>
     }
 
     function renderPlaylistPreview(data) {
-      const videosHtml = data.videos.slice(0, 20).map((v, i) => `
+      const videosHtml = data.videos.slice(0, 50).map((v, i) => `
         <div class="playlist-video-item">
           <img class="playlist-video-thumb" src="${v.thumbnail}" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/120x68?text=No+Thumb'">
           <div class="playlist-video-info">
@@ -901,7 +901,7 @@ https://www.youtube.com/watch?v=..."></textarea>
         <div class="playlist-videos">${videosHtml}</div>
         <div class="playlist-actions">
           <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-            ${data.video_count > 20 ? `⚠️ Will download first 20 of ${data.video_count} videos. ` : ''}Click "Convert Now" to download${data.video_count > 20 ? ' the first 20' : ' all'} as a batch.
+            ${data.video_count > 50 ? `⚠️ Will download first 50 of ${data.video_count} videos. ` : ''}Click "Convert Now" to download${data.video_count > 50 ? ' the first 50' : ' all'} as a batch.
           </div>
         </div>
       `;
@@ -1127,12 +1127,12 @@ https://www.youtube.com/watch?v=..."></textarea>
         
         // Check if it's a playlist from preview data
         if (previewData && previewData.is_playlist && previewData.videos) {
-          // Convert playlist to batch download (max 20 videos)
-          const videosToDownload = previewData.videos.slice(0, 20);
+          // Convert playlist to batch download (max 50 videos)
+          const videosToDownload = previewData.videos.slice(0, 50);
           const playlistUrls = videosToDownload.map(v => v.url).join('\n');
           const totalVideos = previewData.videos.length;
-          if (totalVideos > 20) {
-            showToast(`📋 Downloading first 20 of ${totalVideos} videos`);
+          if (totalVideos > 50) {
+            showToast(`📋 Downloading first 50 of ${totalVideos} videos`);
           } else {
             showToast(`📋 Starting playlist download (${totalVideos} videos)`);
           }
