@@ -948,6 +948,7 @@ HOME_HTML = r"""<!doctype html>
     </div>
 
     <div class="card" id="mainCard">
+      <!-- Platform Toggle -->
       <div class="platform-toggle">
         <button type="button" class="platform-btn youtube active" data-platform="youtube">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
@@ -959,6 +960,7 @@ HOME_HTML = r"""<!doctype html>
         </button>
       </div>
 
+      <!-- YouTube Section -->
       <div class="youtube-section">
         <div class="mode-toggle">
           <button type="button" class="mode-btn active" data-mode="single">Single URL</button>
@@ -1006,6 +1008,7 @@ https://www.youtube.com/watch?v=..."></textarea>
             </div>
           </div>
 
+          <!-- Video/Playlist Preview Card -->
           <div class="preview-card" id="previewCard">
             <div id="previewContent"></div>
           </div>
@@ -1019,7 +1022,10 @@ https://www.youtube.com/watch?v=..."></textarea>
           <span class="status-text" id="statusText">Ready to convert your audio</span>
         </div>
       </form>
-      </div><div class="spotify-section">
+      </div><!-- End YouTube Section -->
+
+      <!-- Spotify Section -->
+      <div class="spotify-section">
         <div id="spotifyNotConfigured" class="spotify-not-configured" style="display:none;">
           <h3>🔧 Spotify Setup Required</h3>
           <p>To use Spotify features, add these environment variables:</p>
@@ -1051,11 +1057,14 @@ https://www.youtube.com/watch?v=..."></textarea>
             </div>
           </div>
 
+          <!-- Spotify Preview Card -->
           <div class="preview-card" id="spotifyPreviewCard">
             <div id="spotifyPreviewContent"></div>
           </div>
         </div>
-      </div><div class="batch-queue" id="batchQueue">
+      </div><!-- End Spotify Section -->
+
+      <div class="batch-queue" id="batchQueue">
         <div class="batch-header">
           <span class="batch-title">📥 Download Queue</span>
           <span class="batch-progress" id="batchProgress">0 / 0</span>
@@ -1259,10 +1268,7 @@ https://www.youtube.com/watch?v=..."></textarea>
 
     function renderPlaylistPreview(data) {
       const videosHtml = data.videos.slice(0, 50).map((v, i) => `
-        <div class="playlist-video-item" style="cursor: pointer;" onclick="toggleCheckbox(this)">
-          <div style="display: flex; align-items: center; padding-right: 12px;">
-            <input type="checkbox" class="playlist-checkbox" checked value="${v.url}" onclick="event.stopPropagation()" style="width: 18px; height: 18px; accent-color: var(--primary);">
-          </div>
+        <div class="playlist-video-item">
           <img class="playlist-video-thumb" src="${v.thumbnail}" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/120x68?text=No+Thumb'">
           <div class="playlist-video-info">
             <div class="playlist-video-title">${v.title}</div>
@@ -1279,28 +1285,13 @@ https://www.youtube.com/watch?v=..."></textarea>
           </div>
           <div class="playlist-count">${data.video_count} videos</div>
         </div>
-        
-        <div style="margin-bottom: 12px; display: flex; gap: 10px;">
-            <button type="button" onclick="selectAll(true)" style="background: none; border: none; color: var(--primary-light); cursor: pointer; font-size: 13px;">Select All</button>
-            <button type="button" onclick="selectAll(false)" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px;">Deselect All</button>
-        </div>
-
         <div class="playlist-videos">${videosHtml}</div>
         <div class="playlist-actions">
           <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-            Select the tracks you want to download, then click "Convert Now".
+            ${data.video_count > 50 ? `⚠️ Will download first 50 of ${data.video_count} videos. ` : ''}Click "Convert Now" to download${data.video_count > 50 ? ' the first 50' : ' all'} as a batch.
           </div>
         </div>
       `;
-    }
-
-    function toggleCheckbox(div) {
-        const cb = div.querySelector('input[type="checkbox"]');
-        cb.checked = !cb.checked;
-    }
-    
-    function selectAll(checked) {
-        document.querySelectorAll('.playlist-checkbox').forEach(cb => cb.checked = checked);
     }
 
     async function fetchPreview(url) {
@@ -1701,21 +1692,18 @@ https://www.youtube.com/watch?v=..."></textarea>
         if (!url) { showToast('⚠️ Please enter a URL'); resetBtn(); return; }
         if (!isValidYT(url)) { showToast('❌ Invalid YouTube URL'); resetBtn(); return; }
         
+        // Check if it's a playlist from preview data
         if (previewData && previewData.is_playlist && previewData.videos) {
-          const checkboxes = document.querySelectorAll('.playlist-checkbox:checked');
-          
-          if (checkboxes.length === 0) {
-              showToast('⚠️ Please select at least one video to download');
-              resetBtn();
-              return;
+          // Convert playlist to batch download (max 50 videos)
+          const videosToDownload = previewData.videos.slice(0, 50);
+          const playlistUrls = videosToDownload.map(v => v.url).join('\n');
+          const totalVideos = previewData.videos.length;
+          if (totalVideos > 50) {
+            showToast(`📋 Downloading first 50 of ${totalVideos} videos`);
+          } else {
+            showToast(`📋 Starting playlist download (${totalVideos} videos)`);
           }
-
-          const selectedUrls = Array.from(checkboxes).map(cb => cb.value);
-          const playlistUrls = selectedUrls.join('\n');
-          
-          showToast(`📋 Starting batch download for ${selectedUrls.length} videos`);
           await handleBatch(playlistUrls, quality);
-
         } else {
           await handleSingle(url, quality);
         }
