@@ -374,7 +374,7 @@ HOME_HTML = r"""<!doctype html>
     @keyframes scanLine { 0% { left: -100%; } 100% { left: 100%; } }
     .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-2xl), var(--glow-intense), inset 0 1px 0 rgba(255, 255, 255, 0.15); border-color: var(--border-light); }
     .mode-toggle { display: flex; background: rgba(0, 0, 0, 0.4); border-radius: 20px; padding: 6px; margin-bottom: 32px; border: 1px solid var(--border); }
-    .mode-btn { flex: 1; padding: 16px 24px; background: transparent; border: none; border-radius: 16px; color: var(--text-muted); font-size: 15px; font-weight: 600; cursor: pointer; transition: var(--transition); }
+    .mode-btn { flex: 1; padding: 16px 24px; background: transparent; border: none; border-radius: 16px; color: var(--text-muted); font-size: 15px; font-weight: 600; cursor: pointer; transition: var(--transition); font-family: inherit; }
     .mode-btn.active { background: var(--gradient-1); color: white; box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4); }
     .mode-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.05); }
     .input-group { margin-bottom: 28px; position: relative; }
@@ -383,7 +383,7 @@ HOME_HTML = r"""<!doctype html>
     input[type="url"], input[type="text"] {
       width: 100%; padding: 20px 24px 20px 56px;
       background: rgba(0, 0, 0, 0.4); border: 2px solid var(--border); border-radius: 20px;
-      color: var(--text); font-size: 16px; font-weight: 500; outline: none; transition: var(--transition);
+      color: var(--text); font-size: 16px; font-weight: 500; outline: none; transition: var(--transition); font-family: inherit;
     }
     input::placeholder { color: var(--text-muted); font-weight: 400; }
     input:focus { border-color: var(--primary); background: rgba(0, 0, 0, 0.6); box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1), var(--glow-primary); transform: translateY(-1px); }
@@ -398,7 +398,7 @@ HOME_HTML = r"""<!doctype html>
     input:focus ~ .input-icon { color: var(--primary); }
     .quality-selector {
       padding: 20px 16px; background: rgba(0, 0, 0, 0.4); border: 2px solid var(--border); border-radius: 20px;
-      color: var(--text); font-size: 15px; font-weight: 600; outline: none; transition: var(--transition); cursor: pointer; min-width: 130px;
+      color: var(--text); font-size: 15px; font-weight: 600; outline: none; transition: var(--transition); cursor: pointer; min-width: 130px; font-family: inherit;
     }
     .quality-selector:hover { border-color: var(--primary-light); background: rgba(0, 0, 0, 0.5); }
     .quality-selector:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1); }
@@ -407,7 +407,7 @@ HOME_HTML = r"""<!doctype html>
       padding: 20px 48px; background: var(--gradient-1); border: none; border-radius: 20px;
       color: white; font-size: 16px; font-weight: 700; cursor: pointer; transition: var(--transition-bounce);
       box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-      position: relative; overflow: hidden; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
+      position: relative; overflow: hidden; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; font-family: inherit;
     }
     .btn-convert::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent); transition: left 0.5s; }
     .btn-convert:hover::before { left: 100%; }
@@ -416,9 +416,9 @@ HOME_HTML = r"""<!doctype html>
     .btn-convert:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     .quick-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; flex-wrap: wrap; gap: 16px; }
     .action-group { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-    .action-link { color: var(--text-dim); text-decoration: none; font-size: 14px; font-weight: 500; transition: var(--transition); padding: 8px 16px; border-radius: 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); }
+    .action-link { color: var(--text-dim); text-decoration: none; font-size: 14px; font-weight: 500; transition: var(--transition); padding: 8px 16px; border-radius: 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); font-family: inherit; }
     .action-link:hover { color: var(--primary-light); background: rgba(99, 102, 241, 0.1); border-color: var(--primary); }
-    .health-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
+    .health-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); font-family: inherit; }
     .health-badge.error { background: rgba(239, 68, 68, 0.1); color: var(--error); border-color: rgba(239, 68, 68, 0.2); }
     .health-badge.loading { background: rgba(251, 191, 36, 0.1); color: var(--warning); border-color: rgba(251, 191, 36, 0.2); }
     .health-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: healthPulse 2s ease-in-out infinite; }
@@ -466,7 +466,7 @@ HOME_HTML = r"""<!doctype html>
     .batch-info { flex: 1; min-width: 0; }
     .batch-item-title { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .batch-item-url { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-    .batch-item-download { padding: 10px 16px; background: var(--success); border: none; border-radius: 12px; color: white; font-size: 13px; font-weight: 600; cursor: pointer; opacity: 0; transition: var(--transition); }
+    .batch-item-download { padding: 10px 16px; background: var(--success); border: none; border-radius: 12px; color: white; font-size: 13px; font-weight: 600; cursor: pointer; opacity: 0; transition: var(--transition); font-family: inherit; }
     .batch-item.done .batch-item-download { opacity: 1; }
     .batch-item-download:hover { transform: scale(1.05); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
     .download-all-btn { margin-top: 20px; width: 100%; background: linear-gradient(135deg, var(--success), #059669); display: none; }
