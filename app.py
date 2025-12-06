@@ -177,39 +177,61 @@ def fetch_playlist_info(url: str) -> dict:
     # Extract playlist ID and build clean playlist URL
     playlist_id = None
     if "list=" in url:
-        import re
         match = re.search(r'list=([a-zA-Z0-9_-]+)', url)
         if match:
             playlist_id = match.group(1)
             # Use clean playlist URL for faster extraction
-            url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            clean_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            print(f"Extracted playlist ID: {playlist_id}, using URL: {clean_url}", flush=True)
+        else:
+            print(f"Could not extract playlist ID from: {url}", flush=True)
+            return None
+    else:
+        print(f"No list= found in URL: {url}", flush=True)
+        return None
     
-    for client in ["web", "mweb"]:
+    # Try different approaches
+    approaches = [
+        {"extract_flat": True, "client": None},  # No client specification
+        {"extract_flat": True, "client": "web"},
+        {"extract_flat": "in_playlist", "client": None},  # Different flat mode
+    ]
+    
+    for approach in approaches:
         try:
             opts = {
                 "quiet": True,
                 "no_warnings": True,
                 "skip_download": True,
-                "extract_flat": True,  # Faster than "in_playlist"
+                "extract_flat": approach["extract_flat"],
                 "noplaylist": False,
-                "socket_timeout": 10,
+                "socket_timeout": 15,
                 "retries": 1,
-                "extractor_args": {"youtube": {"player_client": [client]}},
             }
+            if approach["client"]:
+                opts["extractor_args"] = {"youtube": {"player_client": [approach["client"]]}}
             if cookiefile:
                 opts["cookiefile"] = cookiefile
-            if dsid:
+            if dsid and "extractor_args" in opts:
                 opts["extractor_args"]["youtube"]["data_sync_id"] = [dsid]
             
+            print(f"Trying playlist fetch with: extract_flat={approach['extract_flat']}, client={approach['client']}", flush=True)
+            
             with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
+                info = ydl.extract_info(clean_url, download=False)
+                
+                if info:
+                    print(f"Got info type: {info.get('_type')}, has entries: {'entries' in info}", flush=True)
+                    
                 if info.get("_type") == "playlist" or "entries" in info:
                     entries = list(info.get("entries", []) or [])
+                    print(f"Found {len(entries)} entries", flush=True)
+                    
                     videos = []
                     for entry in entries[:50]:  # Limit to 50 videos
                         if entry:
                             vid_id = entry.get("id") or entry.get("url", "").split("=")[-1]
-                            if vid_id:
+                            if vid_id and len(vid_id) == 11:  # YouTube video IDs are 11 chars
                                 videos.append({
                                     "id": vid_id,
                                     "title": entry.get("title", "Unknown"),
@@ -218,8 +240,9 @@ def fetch_playlist_info(url: str) -> dict:
                                     "duration_formatted": format_duration(entry.get("duration")),
                                     "url": f"https://www.youtube.com/watch?v={vid_id}",
                                 })
+                    
                     if videos:
-                        print(f"Playlist fetch success with {client}: {len(videos)} videos", flush=True)
+                        print(f"Playlist fetch success: {len(videos)} videos", flush=True)
                         return {
                             "is_playlist": True,
                             "title": info.get("title", "Playlist"),
@@ -227,9 +250,13 @@ def fetch_playlist_info(url: str) -> dict:
                             "video_count": len(videos),
                             "videos": videos,
                         }
+                    else:
+                        print("No valid videos found in entries", flush=True)
         except Exception as e:
-            print(f"Playlist fetch with {client} failed: {e}", flush=True)
+            print(f"Playlist fetch failed: {e}", flush=True)
             continue
+    
+    print("All playlist fetch approaches failed", flush=True)
     return None
 
 def is_playlist_url(url: str) -> bool:
@@ -438,23 +465,27 @@ def preview():
     if not url:
         return jsonify({"error": "URL required"}), 400
     
-    # Check if it's a playlist URL
-    if "list=" in url:
+    # Check if it's a playlist URL (has list= parameter)
+    has_playlist = "list=" in url
+    
+    if has_playlist:
         print(f"Fetching playlist preview for: {url}", flush=True)
         playlist_info = fetch_playlist_info(url)
-        if playlist_info:
+        if playlist_info and playlist_info.get("videos"):
             print(f"Playlist preview success: {playlist_info.get('video_count')} videos", flush=True)
             return jsonify(playlist_info)
         else:
-            print("Playlist fetch failed, trying as single video...", flush=True)
+            print("Playlist fetch failed", flush=True)
+            # Don't fall back to single video - return error so user can still click Convert
+            return jsonify({"error": "Could not load playlist. Click Convert to download anyway."}), 400
     
-    # Single video
+    # Single video (no list= in URL)
     video_info = fetch_video_info(url)
     if video_info:
         video_info["is_playlist"] = False
         return jsonify(video_info)
     
-    return jsonify({"error": "Could not fetch video info. The playlist may be private or too large."}), 400
+    return jsonify({"error": "Could not fetch video info"}), 400
 
 @app.route("/playlist_info", methods=["POST"])
 def playlist_info():
