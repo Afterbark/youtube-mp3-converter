@@ -179,6 +179,8 @@ def fetch_playlist_info(url: str) -> dict:
             "skip_download": True,
             "extract_flat": "in_playlist",
             "noplaylist": False,
+            "socket_timeout": 15,
+            "retries": 2,
         }
         if cookiefile:
             opts["cookiefile"] = cookiefile
@@ -418,9 +420,13 @@ def preview():
     
     # Check if it's a playlist URL
     if "list=" in url:
+        print(f"Fetching playlist preview for: {url}", flush=True)
         playlist_info = fetch_playlist_info(url)
         if playlist_info:
+            print(f"Playlist preview success: {playlist_info.get('video_count')} videos", flush=True)
             return jsonify(playlist_info)
+        else:
+            print("Playlist fetch failed, trying as single video...", flush=True)
     
     # Single video
     video_info = fetch_video_info(url)
@@ -428,7 +434,7 @@ def preview():
         video_info["is_playlist"] = False
         return jsonify(video_info)
     
-    return jsonify({"error": "Could not fetch video info"}), 400
+    return jsonify({"error": "Could not fetch video info. The playlist may be private or too large."}), 400
 
 @app.route("/playlist_info", methods=["POST"])
 def playlist_info():
@@ -868,7 +874,7 @@ HOME_HTML = r"""<!doctype html>
     /* Preview Card Styles */
     .preview-card { display: none; margin-top: 24px; padding: 20px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); border-radius: 20px; animation: fadeIn 0.3s ease; }
     .preview-card.active { display: block; }
-    .preview-card.loading { display: flex; align-items: center; justify-content: center; min-height: 100px; }
+    .preview-card.loading .preview-content { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 120px; gap: 12px; }
     .preview-content { display: flex; gap: 20px; align-items: flex-start; }
     .preview-thumbnail { width: 180px; height: 100px; border-radius: 12px; object-fit: cover; flex-shrink: 0; background: rgba(0,0,0,0.3); }
     .preview-info { flex: 1; min-width: 0; }
@@ -1304,16 +1310,29 @@ https://www.youtube.com/watch?v=..."></textarea>
       
       // Show loading state
       previewCard.classList.add('active', 'loading');
-      previewContent.innerHTML = '<div class="spinner"></div><span style="margin-left: 12px; color: var(--text-muted);">Loading preview...</span>';
+      previewContent.innerHTML = `
+        <div class="spinner" style="width: 32px; height: 32px;"></div>
+        <span style="color: var(--text-muted);">Loading preview...</span>
+      `;
       
       try {
+        // Add timeout for slow playlists
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        
         const resp = await fetch('/preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ url })
+          body: new URLSearchParams({ url }),
+          signal: controller.signal
         });
         
-        if (!resp.ok) throw new Error('Preview failed');
+        clearTimeout(timeoutId);
+        
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'Preview failed');
+        }
         const data = await resp.json();
         previewData = data;
         
@@ -1325,7 +1344,16 @@ https://www.youtube.com/watch?v=..."></textarea>
           previewContent.innerHTML = renderVideoPreview(data);
         }
       } catch (e) {
-        previewCard.classList.remove('active', 'loading');
+        previewCard.classList.remove('loading');
+        const errorMsg = e.name === 'AbortError' 
+          ? 'Preview timed out. Click Convert to download anyway.' 
+          : (e.message || 'Try clicking Convert to download anyway');
+        previewContent.innerHTML = `
+          <div style="text-align: center; padding: 20px; width: 100%;">
+            <div style="color: var(--error); margin-bottom: 8px;">❌ Failed to load preview</div>
+            <div style="color: var(--text-muted); font-size: 13px;">${errorMsg}</div>
+          </div>
+        `;
         previewData = null;
       }
     }
@@ -1728,6 +1756,31 @@ https://www.youtube.com/watch?v=..."></textarea>
             showToast(`📋 Starting playlist download (${totalVideos} videos)`);
           }
           await handleBatch(playlistUrls, quality);
+        } else if (!previewData && url.includes('list=')) {
+          // Playlist URL but preview failed - try fetching playlist info directly
+          showToast('📋 Fetching playlist...');
+          try {
+            const resp = await fetch('/playlist_info', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({ url })
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data.videos && data.videos.length > 0) {
+                const videosToDownload = data.videos.slice(0, 50);
+                const playlistUrls = videosToDownload.map(v => v.url).join('\n');
+                showToast(`📋 Found ${videosToDownload.length} videos, starting download...`);
+                await handleBatch(playlistUrls, quality);
+                return;
+              }
+            }
+            // Fallback to single download if playlist fetch fails
+            showToast('⚠️ Could not load playlist, trying single video...');
+            await handleSingle(url, quality);
+          } catch (err) {
+            await handleSingle(url, quality);
+          }
         } else {
           await handleSingle(url, quality);
         }
