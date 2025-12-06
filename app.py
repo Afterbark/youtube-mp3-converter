@@ -901,7 +901,7 @@ https://www.youtube.com/watch?v=..."></textarea>
         <div class="playlist-videos">${videosHtml}</div>
         <div class="playlist-actions">
           <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-            ${data.video_count > 20 ? `Showing first 20 of ${data.video_count} videos. ` : ''}Click "Convert Now" to download all as a batch.
+            ${data.video_count > 20 ? `⚠️ Will download first 20 of ${data.video_count} videos. ` : ''}Click "Convert Now" to download${data.video_count > 20 ? ' the first 20' : ' all'} as a batch.
           </div>
         </div>
       `;
@@ -1127,9 +1127,15 @@ https://www.youtube.com/watch?v=..."></textarea>
         
         // Check if it's a playlist from preview data
         if (previewData && previewData.is_playlist && previewData.videos) {
-          // Convert playlist to batch download
-          const playlistUrls = previewData.videos.map(v => v.url).join('\n');
-          showToast(`📋 Starting playlist download (${previewData.videos.length} videos)`);
+          // Convert playlist to batch download (max 20 videos)
+          const videosToDownload = previewData.videos.slice(0, 20);
+          const playlistUrls = videosToDownload.map(v => v.url).join('\n');
+          const totalVideos = previewData.videos.length;
+          if (totalVideos > 20) {
+            showToast(`📋 Downloading first 20 of ${totalVideos} videos`);
+          } else {
+            showToast(`📋 Starting playlist download (${totalVideos} videos)`);
+          }
           await handleBatch(playlistUrls, quality);
         } else {
           await handleSingle(url, quality);
