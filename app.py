@@ -172,45 +172,65 @@ def fetch_video_info(url: str) -> dict:
 def fetch_playlist_info(url: str) -> dict:
     """Fetch playlist metadata and all video info"""
     cookiefile = str(COOKIE_PATH) if COOKIE_PATH else None
-    try:
-        opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "extract_flat": "in_playlist",
-            "noplaylist": False,
-            "socket_timeout": 15,
-            "retries": 2,
-        }
-        if cookiefile:
-            opts["cookiefile"] = cookiefile
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if info.get("_type") == "playlist" or "entries" in info:
-                entries = info.get("entries", [])
-                videos = []
-                for entry in entries[:50]:  # Limit to 50 videos
-                    if entry:
-                        vid_id = entry.get("id") or entry.get("url", "").split("=")[-1]
-                        videos.append({
-                            "id": vid_id,
-                            "title": entry.get("title", "Unknown"),
-                            "thumbnail": f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg",
-                            "duration": entry.get("duration"),
-                            "duration_formatted": format_duration(entry.get("duration")),
-                            "url": f"https://www.youtube.com/watch?v={vid_id}",
-                        })
-                return {
-                    "is_playlist": True,
-                    "title": info.get("title", "Playlist"),
-                    "channel": info.get("channel") or info.get("uploader", "Unknown"),
-                    "video_count": len(videos),
-                    "videos": videos,
-                }
-            return None
-    except Exception as e:
-        print(f"Playlist fetch error: {e}", flush=True)
-        return None
+    dsid = YTDLP_DATA_SYNC_ID
+    
+    # Extract playlist ID and build clean playlist URL
+    playlist_id = None
+    if "list=" in url:
+        import re
+        match = re.search(r'list=([a-zA-Z0-9_-]+)', url)
+        if match:
+            playlist_id = match.group(1)
+            # Use clean playlist URL for faster extraction
+            url = f"https://www.youtube.com/playlist?list={playlist_id}"
+    
+    for client in ["web", "mweb"]:
+        try:
+            opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "extract_flat": True,  # Faster than "in_playlist"
+                "noplaylist": False,
+                "socket_timeout": 10,
+                "retries": 1,
+                "extractor_args": {"youtube": {"player_client": [client]}},
+            }
+            if cookiefile:
+                opts["cookiefile"] = cookiefile
+            if dsid:
+                opts["extractor_args"]["youtube"]["data_sync_id"] = [dsid]
+            
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if info.get("_type") == "playlist" or "entries" in info:
+                    entries = list(info.get("entries", []) or [])
+                    videos = []
+                    for entry in entries[:50]:  # Limit to 50 videos
+                        if entry:
+                            vid_id = entry.get("id") or entry.get("url", "").split("=")[-1]
+                            if vid_id:
+                                videos.append({
+                                    "id": vid_id,
+                                    "title": entry.get("title", "Unknown"),
+                                    "thumbnail": f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg",
+                                    "duration": entry.get("duration"),
+                                    "duration_formatted": format_duration(entry.get("duration")),
+                                    "url": f"https://www.youtube.com/watch?v={vid_id}",
+                                })
+                    if videos:
+                        print(f"Playlist fetch success with {client}: {len(videos)} videos", flush=True)
+                        return {
+                            "is_playlist": True,
+                            "title": info.get("title", "Playlist"),
+                            "channel": info.get("channel") or info.get("uploader", "Unknown"),
+                            "video_count": len(videos),
+                            "videos": videos,
+                        }
+        except Exception as e:
+            print(f"Playlist fetch with {client} failed: {e}", flush=True)
+            continue
+    return None
 
 def is_playlist_url(url: str) -> bool:
     return "list=" in url and "watch?v=" not in url.split("list=")[0][-20:]
@@ -1316,9 +1336,9 @@ https://www.youtube.com/watch?v=..."></textarea>
       `;
       
       try {
-        // Add timeout for slow playlists
+        // Add timeout for slow playlists (must be under Heroku's 30s limit)
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        const timeoutId = setTimeout(() => controller.abort(), 28000);
         
         const resp = await fetch('/preview', {
           method: 'POST',
