@@ -180,6 +180,12 @@ def fetch_playlist_info(url: str) -> dict:
         match = re.search(r'list=([a-zA-Z0-9_-]+)', url)
         if match:
             playlist_id = match.group(1)
+            
+            # Check for Radio Mix playlists (start with RD) - these are private/auto-generated
+            if playlist_id.startswith("RD"):
+                print(f"Radio Mix playlist detected: {playlist_id} - these are not downloadable", flush=True)
+                return {"error": "radio_mix", "message": "YouTube Radio Mix playlists are auto-generated and cannot be downloaded. Try a regular playlist instead."}
+            
             # Use clean playlist URL for faster extraction
             clean_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             print(f"Extracted playlist ID: {playlist_id}, using URL: {clean_url}", flush=True)
@@ -471,6 +477,11 @@ def preview():
     if has_playlist:
         print(f"Fetching playlist preview for: {url}", flush=True)
         playlist_info = fetch_playlist_info(url)
+        
+        # Check for special error cases
+        if playlist_info and playlist_info.get("error") == "radio_mix":
+            return jsonify({"error": playlist_info.get("message", "This playlist type is not supported.")}), 400
+        
         if playlist_info and playlist_info.get("videos"):
             print(f"Playlist preview success: {playlist_info.get('video_count')} videos", flush=True)
             return jsonify(playlist_info)
@@ -551,38 +562,104 @@ def spotify_download():
     if len(tracks) > 50:
         tracks = tracks[:50]
     
-    # Search YouTube for each track
-    youtube_urls = []
-    track_titles = []
-    for track in tracks:
-        search_query = track.get('search_query', f"{track.get('title', '')} {track.get('artist', '')}")
-        yt_url = search_youtube_for_track(search_query)
-        if yt_url:
-            youtube_urls.append(yt_url)
-            track_titles.append(f"{track.get('title', 'Unknown')} - {track.get('artist', 'Unknown')}")
-    
-    if not youtube_urls:
-        return jsonify({"error": "No YouTube matches found"}), 400
-    
-    # Create batch job
+    # Create batch job immediately with track info (search YouTube in background)
     batch_id = str(uuid.uuid4())
+    jobs = []
+    for track in tracks:
+        jobs.append({
+            "job_id": str(uuid.uuid4()),
+            "url": None,  # Will be filled by YouTube search
+            "status": "searching",
+            "title": f"{track.get('title', 'Unknown')} - {track.get('artist', 'Unknown')}",
+            "search_query": track.get('search_query', f"{track.get('title', '')} {track.get('artist', '')}"),
+            "error": None,
+            "file_path": None
+        })
+    
     batch_queue[batch_id] = {
-        "status": "processing", "total": len(youtube_urls), "completed": 0, "failed": 0, 
-        "current_index": 0, "quality": quality, "created_at": datetime.now().isoformat(),
-        "jobs": [{"job_id": str(uuid.uuid4()), "url": url, "status": "queued", "title": title, "error": None, "file_path": None} 
-                 for url, title in zip(youtube_urls, track_titles)]
+        "status": "processing",
+        "total": len(tracks),
+        "completed": 0,
+        "failed": 0,
+        "current_index": 0,
+        "quality": quality,
+        "created_at": datetime.now().isoformat(),
+        "jobs": jobs
     }
     
-    thread = threading.Thread(target=batch_download_task, args=(batch_id, youtube_urls, quality))
+    # Start background task that searches YouTube THEN downloads
+    thread = threading.Thread(target=spotify_batch_task, args=(batch_id, quality))
     thread.daemon = True
     thread.start()
     
     return jsonify({
-        "batch_id": batch_id, 
-        "total": len(youtube_urls), 
+        "batch_id": batch_id,
+        "total": len(tracks),
         "status": "processing",
-        "jobs": [{"job_id": j["job_id"], "url": j["url"], "status": "queued", "title": j["title"]} for j in batch_queue[batch_id]["jobs"]]
+        "jobs": [{"job_id": j["job_id"], "url": "", "status": "searching", "title": j["title"]} for j in jobs]
     })
+
+def spotify_batch_task(batch_id: str, quality: str):
+    """Background task: search YouTube for each track, then download"""
+    batch = batch_queue.get(batch_id)
+    if not batch:
+        return
+    
+    # Phase 1: Search YouTube for each track
+    print(f"[{batch_id}] Starting YouTube search for {len(batch['jobs'])} tracks", flush=True)
+    for i, job in enumerate(batch["jobs"]):
+        batch["current_index"] = i
+        search_query = job.get("search_query", job["title"])
+        print(f"[{batch_id}] Searching: {search_query}", flush=True)
+        
+        yt_url = search_youtube_for_track(search_query)
+        if yt_url:
+            job["url"] = yt_url
+            job["status"] = "queued"
+            print(f"[{batch_id}] Found: {yt_url}", flush=True)
+        else:
+            job["status"] = "error"
+            job["error"] = "No YouTube match found"
+            batch["failed"] += 1
+            print(f"[{batch_id}] No match for: {search_query}", flush=True)
+    
+    # Phase 2: Download all found tracks
+    print(f"[{batch_id}] Starting downloads", flush=True)
+    for i, job in enumerate(batch["jobs"]):
+        if job["status"] != "queued" or not job.get("url"):
+            continue
+        
+        batch["current_index"] = i
+        job["status"] = "downloading"
+        job_id = job["job_id"]
+        
+        # Create job in main queue for download
+        job_queue[job_id] = {
+            "status": "downloading",
+            "url": job["url"],
+            "title": job["title"],
+            "quality": quality,
+            "error": None,
+            "file_path": None,
+            "created_at": datetime.now().isoformat()
+        }
+        
+        download_task(job_id, job["url"], quality)
+        
+        # Update batch job from main job queue
+        main_job = job_queue.get(job_id, {})
+        job["status"] = main_job.get("status", "error")
+        job["title"] = main_job.get("title", job["title"])
+        job["error"] = main_job.get("error")
+        job["file_path"] = main_job.get("file_path")
+        
+        if job["status"] == "done":
+            batch["completed"] += 1
+        elif job["status"] == "error":
+            batch["failed"] += 1
+    
+    batch["status"] = "done"
+    print(f"[{batch_id}] Spotify batch complete: {batch['completed']}/{batch['total']}", flush=True)
 
 @app.route("/enqueue", methods=["POST"])
 def enqueue():
@@ -881,11 +958,14 @@ HOME_HTML = r"""<!doctype html>
     .batch-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 3px; }
     .batch-list::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
     .batch-item { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); border-radius: 16px; transition: var(--transition); }
+    .batch-item.searching { border-color: #1ed760; background: rgba(30, 215, 96, 0.1); }
+    .batch-item.queued { border-color: var(--primary); background: rgba(99, 102, 241, 0.1); }
     .batch-item.downloading { border-color: var(--warning); background: rgba(251, 191, 36, 0.1); }
     .batch-item.done { border-color: var(--success); background: rgba(16, 185, 129, 0.1); }
     .batch-item.error { border-color: var(--error); background: rgba(239, 68, 68, 0.1); }
     .batch-status-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .batch-status-icon.queued { background: var(--text-muted); }
+    .batch-status-icon.queued { background: var(--primary); }
+    .batch-status-icon.searching { background: #1ed760; animation: pulse 1.5s infinite; }
     .batch-status-icon.downloading { background: var(--warning); animation: pulse 1.5s infinite; }
     .batch-status-icon.done { background: var(--success); }
     .batch-status-icon.error { background: var(--error); }
@@ -1734,14 +1814,14 @@ https://www.youtube.com/watch?v=..."></textarea>
         
         data.jobs.forEach(job => {
           const item = document.createElement('div');
-          item.className = 'batch-item';
+          item.className = 'batch-item searching';
           item.id = 'job-' + job.job_id;
-          item.innerHTML = '<div class="batch-status-icon queued"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg></div><div class="batch-info"><div class="batch-item-title">' + (job.title || 'Waiting...') + '</div><div class="batch-item-url" style="color: #1ed760;">via YouTube search</div></div><button type="button" class="batch-item-download" onclick="window.location.href=\'/download_job/' + job.job_id + '\'">⬇ Download</button>';
+          item.innerHTML = '<div class="batch-status-icon searching"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></div><div class="batch-info"><div class="batch-item-title">' + (job.title || 'Searching...') + '</div><div class="batch-item-url" style="color: #1ed760;">🔍 Searching YouTube...</div></div><button type="button" class="batch-item-download" onclick="window.location.href=\'/download_job/' + job.job_id + '\'">⬇ Download</button>';
           batchList.appendChild(item);
         });
         
         batchProgress.textContent = '0 / ' + data.total;
-        showToast(`✅ Found ${data.total} tracks on YouTube. Starting download...`);
+        showToast(`🔍 Searching YouTube for ${data.total} tracks...`);
         
         // Track completed jobs for notifications
         const completedJobs = new Set();
@@ -1764,11 +1844,28 @@ https://www.youtube.com/watch?v=..."></textarea>
             
             item.className = 'batch-item ' + job.status;
             item.querySelector('.batch-item-title').textContent = job.title || 'Processing...';
+            
+            // Update URL text based on status
+            const urlEl = item.querySelector('.batch-item-url');
+            if (job.status === 'searching') {
+              urlEl.innerHTML = '🔍 Searching YouTube...';
+            } else if (job.status === 'queued') {
+              urlEl.innerHTML = '⏳ Waiting to download...';
+            } else if (job.status === 'downloading') {
+              urlEl.innerHTML = '⬇️ Downloading...';
+            } else if (job.status === 'done') {
+              urlEl.innerHTML = '✅ Ready!';
+            } else if (job.status === 'error') {
+              urlEl.innerHTML = '❌ ' + (job.error || 'Failed');
+            }
+            
             const icon = item.querySelector('.batch-status-icon');
             icon.className = 'batch-status-icon ' + job.status;
             if (job.status === 'done') icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
             else if (job.status === 'error') icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
             else if (job.status === 'downloading') icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>';
+            else if (job.status === 'searching') icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>';
+            else if (job.status === 'queued') icon.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg>';
           });
           
           if (st.status === 'done') {
