@@ -271,6 +271,7 @@ def is_playlist_url(url: str) -> bool:
 # ---------- Spotify Functions ----------
 def parse_spotify_url(url: str) -> tuple:
     """Parse Spotify URL and return (type, id)"""
+    print(f"Parsing Spotify URL: {url}", flush=True)
     patterns = [
         (r'spotify\.com/playlist/([a-zA-Z0-9]+)', 'playlist'),
         (r'spotify\.com/album/([a-zA-Z0-9]+)', 'album'),
@@ -279,17 +280,25 @@ def parse_spotify_url(url: str) -> tuple:
     for pattern, url_type in patterns:
         match = re.search(pattern, url)
         if match:
-            return (url_type, match.group(1))
+            spotify_id = match.group(1)
+            print(f"Parsed Spotify {url_type}: {spotify_id}", flush=True)
+            return (url_type, spotify_id)
+    print(f"Could not parse Spotify URL: {url}", flush=True)
     return (None, None)
 
 def get_spotify_playlist(playlist_id: str) -> dict:
     """Fetch Spotify playlist tracks"""
     if not spotify_client:
+        print("Spotify client not initialized", flush=True)
         return None
     try:
+        print(f"Fetching Spotify playlist: {playlist_id}", flush=True)
         results = spotify_client.playlist(playlist_id)
+        print(f"Got playlist: {results.get('name', 'Unknown')}", flush=True)
+        
         tracks = []
         items = results.get('tracks', {}).get('items', [])
+        print(f"Initial items count: {len(items)}", flush=True)
         
         # Handle pagination for large playlists
         while len(tracks) < 50 and items:
@@ -299,13 +308,16 @@ def get_spotify_playlist(playlist_id: str) -> dict:
                 track = item.get('track')
                 if track and track.get('name'):
                     artists = ", ".join([a['name'] for a in track.get('artists', [])])
+                    # Safely get thumbnail - handle empty image lists
+                    album_images = track.get('album', {}).get('images', [])
+                    thumbnail = album_images[0].get('url', '') if album_images else ''
                     tracks.append({
                         'title': track['name'],
                         'artist': artists,
                         'album': track.get('album', {}).get('name', ''),
                         'duration_ms': track.get('duration_ms', 0),
                         'duration_formatted': format_duration(track.get('duration_ms', 0) // 1000),
-                        'thumbnail': track.get('album', {}).get('images', [{}])[0].get('url', ''),
+                        'thumbnail': thumbnail,
                         'search_query': f"{track['name']} {artists}",
                     })
             
@@ -317,17 +329,25 @@ def get_spotify_playlist(playlist_id: str) -> dict:
             else:
                 break
         
+        print(f"Parsed {len(tracks)} tracks from playlist", flush=True)
+        
+        # Safely get playlist thumbnail
+        playlist_images = results.get('images', [])
+        playlist_thumbnail = playlist_images[0].get('url', '') if playlist_images else ''
+        
         return {
             'is_spotify': True,
             'type': 'playlist',
             'title': results.get('name', 'Playlist'),
             'owner': results.get('owner', {}).get('display_name', 'Unknown'),
-            'thumbnail': results.get('images', [{}])[0].get('url', ''),
+            'thumbnail': playlist_thumbnail,
             'total_tracks': results.get('tracks', {}).get('total', len(tracks)),
             'tracks': tracks,
         }
     except Exception as e:
-        print(f"Spotify playlist error: {e}", flush=True)
+        print(f"Spotify playlist error: {type(e).__name__}: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         return None
 
 def get_spotify_album(album_id: str) -> dict:
@@ -336,6 +356,10 @@ def get_spotify_album(album_id: str) -> dict:
         return None
     try:
         results = spotify_client.album(album_id)
+        # Safely get album thumbnail
+        album_images = results.get('images', [])
+        album_thumbnail = album_images[0].get('url', '') if album_images else ''
+        
         tracks = []
         for item in results.get('tracks', {}).get('items', [])[:50]:
             artists = ", ".join([a['name'] for a in item.get('artists', [])])
@@ -345,7 +369,7 @@ def get_spotify_album(album_id: str) -> dict:
                 'album': results.get('name', ''),
                 'duration_ms': item.get('duration_ms', 0),
                 'duration_formatted': format_duration(item.get('duration_ms', 0) // 1000),
-                'thumbnail': results.get('images', [{}])[0].get('url', ''),
+                'thumbnail': album_thumbnail,
                 'search_query': f"{item['name']} {artists}",
             })
         
@@ -354,7 +378,7 @@ def get_spotify_album(album_id: str) -> dict:
             'type': 'album',
             'title': results.get('name', 'Album'),
             'owner': ", ".join([a['name'] for a in results.get('artists', [])]),
-            'thumbnail': results.get('images', [{}])[0].get('url', ''),
+            'thumbnail': album_thumbnail,
             'total_tracks': results.get('total_tracks', len(tracks)),
             'tracks': tracks,
         }
@@ -369,12 +393,16 @@ def get_spotify_track(track_id: str) -> dict:
     try:
         track = spotify_client.track(track_id)
         artists = ", ".join([a['name'] for a in track.get('artists', [])])
+        # Safely get thumbnail
+        album_images = track.get('album', {}).get('images', [])
+        thumbnail = album_images[0].get('url', '') if album_images else ''
+        
         return {
             'is_spotify': True,
             'type': 'track',
             'title': track.get('name', 'Track'),
             'owner': artists,
-            'thumbnail': track.get('album', {}).get('images', [{}])[0].get('url', ''),
+            'thumbnail': thumbnail,
             'total_tracks': 1,
             'tracks': [{
                 'title': track['name'],
@@ -382,7 +410,7 @@ def get_spotify_track(track_id: str) -> dict:
                 'album': track.get('album', {}).get('name', ''),
                 'duration_ms': track.get('duration_ms', 0),
                 'duration_formatted': format_duration(track.get('duration_ms', 0) // 1000),
-                'thumbnail': track.get('album', {}).get('images', [{}])[0].get('url', ''),
+                'thumbnail': thumbnail,
                 'search_query': f"{track['name']} {artists}",
             }],
         }
@@ -510,11 +538,33 @@ def playlist_info():
 
 @app.route("/spotify_status", methods=["GET"])
 def spotify_status():
-    """Check if Spotify is configured"""
-    return jsonify({
-        "available": spotify_client is not None,
-        "message": "Spotify ready" if spotify_client else "Spotify not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to environment."
-    })
+    """Check if Spotify is configured and working"""
+    if not spotify_client:
+        return jsonify({
+            "available": False,
+            "message": "Spotify not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET."
+        })
+    
+    # Test the API with a simple call
+    try:
+        # Try to get a well-known track to verify credentials work
+        test = spotify_client.track("4cOdK2wGLETKBW3PvgPWqT")  # Rick Astley - Never Gonna Give You Up
+        if test:
+            return jsonify({
+                "available": True,
+                "message": "Spotify ready"
+            })
+        else:
+            return jsonify({
+                "available": False,
+                "message": "Spotify API returned empty response"
+            })
+    except Exception as e:
+        print(f"Spotify API test failed: {e}", flush=True)
+        return jsonify({
+            "available": False,
+            "message": f"Spotify API error: {str(e)}"
+        })
 
 @app.route("/spotify_preview", methods=["POST"])
 def spotify_preview():
@@ -527,21 +577,30 @@ def spotify_preview():
         return jsonify({"error": "Spotify not configured. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET."}), 400
     
     url_type, spotify_id = parse_spotify_url(url)
-    if not url_type:
-        return jsonify({"error": "Invalid Spotify URL"}), 400
+    print(f"Spotify preview: type={url_type}, id={spotify_id}", flush=True)
     
-    if url_type == 'playlist':
-        info = get_spotify_playlist(spotify_id)
-    elif url_type == 'album':
-        info = get_spotify_album(spotify_id)
-    elif url_type == 'track':
-        info = get_spotify_track(spotify_id)
-    else:
-        return jsonify({"error": "Unsupported Spotify URL type"}), 400
+    if not url_type:
+        return jsonify({"error": "Invalid Spotify URL. Make sure it's a playlist, album, or track link."}), 400
+    
+    info = None
+    try:
+        if url_type == 'playlist':
+            info = get_spotify_playlist(spotify_id)
+        elif url_type == 'album':
+            info = get_spotify_album(spotify_id)
+        elif url_type == 'track':
+            info = get_spotify_track(spotify_id)
+        else:
+            return jsonify({"error": "Unsupported Spotify URL type"}), 400
+    except Exception as e:
+        print(f"Spotify preview exception: {type(e).__name__}: {e}", flush=True)
+        return jsonify({"error": f"Spotify API error: {str(e)}"}), 400
     
     if info:
+        print(f"Spotify preview success: {info.get('title', 'Unknown')}", flush=True)
         return jsonify(info)
-    return jsonify({"error": "Could not fetch Spotify info"}), 400
+    
+    return jsonify({"error": "Could not fetch Spotify info. The playlist may be private."}), 400
 
 @app.route("/spotify_download", methods=["POST"])
 def spotify_download():
