@@ -8,6 +8,7 @@ import urllib.parse
 import urllib.request
 import threading
 import zipfile
+import requests
 from pathlib import Path
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file, render_template_string
@@ -45,7 +46,7 @@ YTDLP_DATA_SYNC_ID = os.getenv("YTDLP_DATA_SYNC_ID")
 OUT_DEFAULT = "yt_%(id)s.%(ext)s"
 SAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
-CLIENTS_TO_TRY = ["web", "mweb", "mediaconnect", "tv_embedded"]
+CLIENTS_TO_TRY = ["ios", "android", "web", "mweb", "tv_embedded", "mediaconnect"]
 
 # Spotify configuration
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
@@ -72,6 +73,75 @@ def safe_filename(name: str) -> str:
     if len(name) > 200:
         name = name[:200].rsplit(' ', 1)[0]
     return f"{name}.mp3"
+
+# ---------- Cobalt API Fallback ----------
+def download_with_cobalt(url: str, quality: str = "192") -> dict:
+    """Fallback to Cobalt API when yt-dlp fails"""
+    bitrate_map = {"128": "128", "192": "192", "256": "256", "320": "320"}
+    cobalt_bitrate = bitrate_map.get(quality, "128")
+    
+    cobalt_instances = [
+        "https://cobalt-api.hyper.lol",
+    ]
+    
+    for instance in cobalt_instances:
+        try:
+            print(f"[Cobalt] Trying: {instance}", flush=True)
+            
+            response = requests.post(
+                f"{instance}/",
+                json={
+                    "url": url,
+                    "downloadMode": "audio",
+                    "audioFormat": "mp3",
+                    "audioBitrate": cobalt_bitrate,
+                },
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                status = data.get("status")
+                
+                if status in ["tunnel", "redirect"]:
+                    print(f"[Cobalt] ✓ Got download URL", flush=True)
+                    return {
+                        "success": True,
+                        "url": data.get("url"),
+                        "filename": data.get("filename", "audio.mp3")
+                    }
+                elif status == "error":
+                    print(f"[Cobalt] ✗ API error", flush=True)
+                    continue
+            else:
+                print(f"[Cobalt] ✗ HTTP {response.status_code}", flush=True)
+                continue
+                
+        except Exception as e:
+            print(f"[Cobalt] ✗ Failed: {e}", flush=True)
+            continue
+    
+    return {"success": False, "error": "Cobalt fallback failed"}
+
+
+def download_cobalt_file(cobalt_url: str, output_path: Path) -> bool:
+    """Download file from Cobalt's URL"""
+    try:
+        print(f"[Cobalt] Downloading file...", flush=True)
+        response = requests.get(cobalt_url, stream=True, timeout=120)
+        if response.status_code == 200:
+            with open(output_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print(f"[Cobalt] ✓ File downloaded", flush=True)
+            return True
+    except Exception as e:
+        print(f"[Cobalt] ✗ Download failed: {e}", flush=True)
+    return False
 
 def _base_ydl_opts(out_default: str, cookiefile: str | None, dsid: str | None, client: str, quality: str = "192"):
     opts = {
@@ -436,14 +506,48 @@ def search_youtube_for_track(search_query: str) -> str:
         print(f"YouTube search error for '{search_query}': {e}", flush=True)
     return None
 
+def search_youtube(query: str, max_results: int = 10) -> list:
+    """Search YouTube and return multiple video results"""
+    try:
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": True,
+            "default_search": f"ytsearch{max_results}",
+        }
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            result = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
+            if result and 'entries' in result:
+                videos = []
+                for entry in result['entries']:
+                    if entry:
+                        videos.append({
+                            "id": entry.get("id"),
+                            "title": entry.get("title", "Unknown"),
+                            "thumbnail": f"https://i.ytimg.com/vi/{entry.get('id')}/hqdefault.jpg",
+                            "duration": entry.get("duration"),
+                            "duration_formatted": format_duration(entry.get("duration")),
+                            "channel": entry.get("channel") or entry.get("uploader", "Unknown"),
+                            "url": f"https://www.youtube.com/watch?v={entry.get('id')}",
+                        })
+                return videos
+    except Exception as e:
+        print(f"YouTube search error for '{query}': {e}", flush=True)
+    return []
+
 def download_task(job_id: str, url: str, quality: str):
+    """Download with yt-dlp using cookies as primary method"""
     job_queue[job_id]["status"] = "downloading"
     cookiefile = str(COOKIE_PATH) if COOKIE_PATH else None
     dsid = YTDLP_DATA_SYNC_ID
     last_error = None
-    for client in CLIENTS_TO_TRY:
+    
+    # PRIMARY METHOD: Use cookies with all clients
+    clients_to_try = ["ios", "android", "web", "mweb", "tv_embedded", "mediaconnect"]
+    
+    for client in clients_to_try:
         try:
-            print(f"[{job_id}] Trying client: {client}", flush=True)
+            print(f"[{job_id}] Trying {client} (with cookies)", flush=True)
             opts = _base_ydl_opts(OUT_DEFAULT, cookiefile, dsid, client, quality)
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -456,7 +560,7 @@ def download_task(job_id: str, url: str, quality: str):
                         downloaded_file = matches[0]
                 if downloaded_file.exists():
                     job_queue[job_id].update({"status": "done", "file_path": str(downloaded_file), "title": title})
-                    print(f"[{job_id}] ✓ Completed with {client}", flush=True)
+                    print(f"[{job_id}] ✓ Done with {client}", flush=True)
                     return
                 else:
                     raise FileNotFoundError("File not found")
@@ -464,7 +568,9 @@ def download_task(job_id: str, url: str, quality: str):
             last_error = str(e)
             print(f"[{job_id}] ✗ {client} failed: {e}", flush=True)
             continue
-    job_queue[job_id].update({"status": "error", "error": f"All clients failed. {last_error}"})
+    
+    # All methods failed
+    job_queue[job_id].update({"status": "error", "error": f"Download failed. {last_error}"})
 
 def batch_download_task(batch_id: str, urls: list, quality: str):
     batch = batch_queue[batch_id]
@@ -492,6 +598,18 @@ def home():
 @app.route("/health")
 def health():
     return jsonify({"ok": True, "status": "online"})
+
+@app.route("/search", methods=["POST"])
+def search():
+    """Search YouTube for videos"""
+    query = request.form.get("query", "").strip()
+    if not query:
+        return jsonify({"error": "Query required"}), 400
+    if len(query) < 2:
+        return jsonify({"error": "Query too short"}), 400
+    
+    results = search_youtube(query, max_results=30)
+    return jsonify({"query": query, "results": results})
 
 @app.route("/preview", methods=["POST"])
 def preview():
@@ -811,7 +929,7 @@ HOME_HTML = r"""<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #050510;
@@ -847,8 +965,9 @@ HOME_HTML = r"""<!doctype html>
       --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    button, input, select, textarea { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
     body {
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       background: var(--bg-dark);
       color: var(--text);
       min-height: 100vh;
@@ -968,9 +1087,9 @@ HOME_HTML = r"""<!doctype html>
     .quality-selector option { background: var(--bg-dark); color: var(--text); padding: 10px; }
     .btn-convert {
       padding: 20px 48px; background: var(--gradient-1); border: none; border-radius: 20px;
-      color: white; font-size: 16px; font-weight: 700; cursor: pointer; transition: var(--transition-bounce);
+      color: white; font-size: 16px; font-weight: 600; cursor: pointer; transition: var(--transition-bounce);
       box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-      position: relative; overflow: hidden; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; font-family: inherit;
+      position: relative; overflow: hidden; text-transform: none; letter-spacing: 0; white-space: nowrap; font-family: inherit;
     }
     .btn-convert::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent); transition: left 0.5s; }
     .btn-convert:hover::before { left: 100%; }
@@ -1005,8 +1124,23 @@ HOME_HTML = r"""<!doctype html>
     @keyframes progressMove { 0% { transform: scaleX(0) translateX(0); } 50% { transform: scaleX(1) translateX(0); } 100% { transform: scaleX(1) translateX(100%); } }
     .single-input { display: block; }
     .batch-input { display: none; }
+    .search-input { display: none; }
     .mode-batch .single-input { display: none; }
     .mode-batch .batch-input { display: block; }
+    .mode-batch .search-input { display: none; }
+    .mode-search .single-input { display: none; }
+    .mode-search .batch-input { display: none; }
+    .mode-search .search-input { display: block; }
+    /* Search Results Styles */
+    .search-result-item { display: flex; gap: 14px; padding: 14px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); border-radius: 16px; transition: var(--transition); cursor: pointer; }
+    .search-result-item:hover { background: rgba(99, 102, 241, 0.1); border-color: var(--primary); transform: translateX(4px); }
+    .search-result-thumb { width: 120px; height: 68px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: rgba(0,0,0,0.3); }
+    .search-result-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .search-result-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .search-result-meta { font-size: 12px; color: var(--text-muted); display: flex; gap: 12px; align-items: center; }
+    .search-result-download { padding: 10px 20px; background: var(--gradient-1); border: none; border-radius: 12px; color: white; font-size: 14px; font-weight: 500; cursor: pointer; transition: var(--transition); flex-shrink: 0; align-self: center; text-transform: none; }
+    .search-result-download:hover { transform: scale(1.05); box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); }
+    .search-result-download:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     .batch-queue { margin-top: 28px; display: none; }
     .batch-queue.active { display: block; }
     .batch-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 0 4px; }
@@ -1160,8 +1294,9 @@ HOME_HTML = r"""<!doctype html>
       <!-- YouTube Section -->
       <div class="youtube-section">
         <div class="mode-toggle">
-          <button type="button" class="mode-btn active" data-mode="single">Single URL</button>
-          <button type="button" class="mode-btn" data-mode="batch">Batch Mode (up to 50)</button>
+          <button type="button" class="mode-btn active" data-mode="single">URL</button>
+          <button type="button" class="mode-btn" data-mode="search">Search</button>
+          <button type="button" class="mode-btn" data-mode="batch">Batch</button>
         </div>
 
         <form id="form">
@@ -1178,6 +1313,32 @@ HOME_HTML = r"""<!doctype html>
                 <option value="320">320 kbps</option>
               </select>
               <button class="btn-convert" id="convertBtn" type="submit"><span id="btnText">Convert Now</span></button>
+            </div>
+          </div>
+
+          <!-- Search Input -->
+          <div class="input-group search-input">
+            <div class="input-wrapper">
+              <div class="input-field">
+                <input id="searchQuery" type="text" placeholder="Search for songs, artists, albums..." autocomplete="off" />
+                <svg class="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              </div>
+              <select class="quality-selector" id="searchQualitySelect">
+                <option value="128">128 kbps</option>
+                <option value="192" selected>192 kbps</option>
+                <option value="256">256 kbps</option>
+                <option value="320">320 kbps</option>
+              </select>
+              <button class="btn-convert" id="searchBtn" type="button"><span id="searchBtnText">Search</span></button>
+            </div>
+            
+            <!-- Search Results -->
+            <div class="search-results" id="searchResults" style="display: none; margin-top: 20px;">
+              <div class="search-results-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <span style="font-size: 16px; font-weight: 700; color: var(--text);">🔍 Search Results</span>
+                <span id="searchResultsCount" style="font-size: 14px; color: var(--text-muted);"></span>
+              </div>
+              <div class="search-results-list" id="searchResultsList" style="display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto;"></div>
             </div>
           </div>
 
@@ -1577,23 +1738,180 @@ https://www.youtube.com/watch?v=..."></textarea>
         $$('.mode-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentMode = btn.dataset.mode;
-        mainCard.className = 'card' + (currentMode === 'batch' ? ' mode-batch' : '');
+        
+        // Update card class based on mode
+        mainCard.classList.remove('mode-batch', 'mode-search');
+        if (currentMode === 'batch') {
+          mainCard.classList.add('mode-batch');
+        } else if (currentMode === 'search') {
+          mainCard.classList.add('mode-search');
+        }
         
         // Only show batch queue in batch mode AND if there's batch data
         if (currentMode === 'batch' && hasBatchData) {
           batchQueue.classList.add('active');
-        } else if (currentMode === 'single') {
-          // Hide batch queue in single mode but don't clear data
+        } else {
           batchQueue.classList.remove('active');
         }
         
         // Hide preview card and status when switching modes
-        if (currentMode === 'batch') {
-          previewCard.classList.remove('active');
+        previewCard.classList.remove('active');
+        if (currentMode !== 'single') {
           statusDisplay.classList.remove('active');
           progressWrapper.classList.remove('active');
         }
+        
+        // Hide search results when leaving search mode
+        if (currentMode !== 'search') {
+          const searchResults = $('#searchResults');
+          if (searchResults) searchResults.style.display = 'none';
+        }
       });
+    });
+
+    // Search functionality
+    const searchQuery = $('#searchQuery');
+    const searchBtn = $('#searchBtn');
+    const searchBtnText = $('#searchBtnText');
+    const searchResults = $('#searchResults');
+    const searchResultsList = $('#searchResultsList');
+    const searchResultsCount = $('#searchResultsCount');
+    const searchQualitySelect = $('#searchQualitySelect');
+
+    searchBtn.addEventListener('click', async () => {
+      const query = searchQuery.value.trim();
+      if (!query) {
+        showToast('⚠️ Please enter a search query');
+        return;
+      }
+      if (query.length < 2) {
+        showToast('⚠️ Search query too short');
+        return;
+      }
+
+      searchBtn.disabled = true;
+      searchBtnText.textContent = 'Searching...';
+      searchResults.style.display = 'none';
+
+      try {
+        const resp = await fetch('/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ query })
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json();
+          showToast('❌ ' + (err.error || 'Search failed'));
+          return;
+        }
+
+        const data = await resp.json();
+        
+        if (!data.results || data.results.length === 0) {
+          showToast('😕 No results found');
+          return;
+        }
+
+        // Render search results
+        searchResultsCount.textContent = data.results.length + ' results';
+        searchResultsList.innerHTML = data.results.map(video => `
+          <div class="search-result-item" data-url="${video.url}">
+            <img class="search-result-thumb" src="${video.thumbnail}" alt="${video.title}" onerror="this.src='https://via.placeholder.com/120x68?text=No+Thumbnail'">
+            <div class="search-result-info">
+              <div class="search-result-title">${video.title}</div>
+              <div class="search-result-meta">
+                <span>${video.channel || 'Unknown'}</span>
+                <span>•</span>
+                <span>${video.duration_formatted || 'Unknown'}</span>
+              </div>
+            </div>
+            <button type="button" class="search-result-download" data-url="${video.url}" data-title="${video.title}">
+              ⬇ Download
+            </button>
+          </div>
+        `).join('');
+
+        searchResults.style.display = 'block';
+        showToast('🔍 Found ' + data.results.length + ' results');
+
+        // Add click handlers for download buttons
+        searchResultsList.querySelectorAll('.search-result-download').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const url = btn.dataset.url;
+            const title = btn.dataset.title;
+            const quality = searchQualitySelect.value;
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Processing...';
+            
+            showToast('🎵 Starting download: ' + title);
+            
+            try {
+              const resp = await fetch('/enqueue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ url, quality })
+              });
+              
+              if (!resp.ok) throw new Error('Failed');
+              const data = await resp.json();
+              
+              // Poll for completion
+              const poll = setInterval(async () => {
+                const sr = await fetch('/status/' + data.job_id);
+                const st = await sr.json();
+                if (st.status === 'done') {
+                  clearInterval(poll);
+                  btn.textContent = '✓ Done!';
+                  btn.style.background = 'var(--success)';
+                  showToast('🎉 Ready: ' + title);
+                  window.location.href = '/download_job/' + data.job_id;
+                  setTimeout(() => {
+                    btn.textContent = '⬇ Download';
+                    btn.style.background = '';
+                    btn.disabled = false;
+                  }, 3000);
+                } else if (st.status === 'error') {
+                  clearInterval(poll);
+                  btn.textContent = '❌ Failed';
+                  btn.style.background = 'var(--error)';
+                  showToast('❌ Failed: ' + (st.error || 'Unknown error'));
+                  setTimeout(() => {
+                    btn.textContent = '⬇ Download';
+                    btn.style.background = '';
+                    btn.disabled = false;
+                  }, 3000);
+                } else {
+                  btn.textContent = '⏳ Converting...';
+                }
+              }, 2000);
+            } catch (err) {
+              btn.textContent = '❌ Error';
+              showToast('❌ Download failed');
+              setTimeout(() => {
+                btn.textContent = '⬇ Download';
+                btn.disabled = false;
+              }, 2000);
+            }
+          });
+        });
+
+      } catch (e) {
+        showToast('❌ Search failed');
+      } finally {
+        searchBtn.disabled = false;
+        searchBtnText.textContent = 'Search';
+      }
+    });
+
+    // Allow Enter key to trigger search
+    searchQuery.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        searchBtn.click();
+      }
     });
 
     function showToast(msg) {
